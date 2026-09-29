@@ -17,10 +17,10 @@ The Compose profile runs two server processes behind a local Nginx gateway,
 shares note mutations through a SQLite database on a Docker named volume, and
 uses Redis Pub/Sub for subscription invalidations. SQLite sharing is intended
 only for a single Docker host and local named volumes; it is not safe to put
-the database on a network filesystem. Task state remains process-local, so an
-in-flight task is not guaranteed to survive a request routed to another
-replica. Use a shared transactional database before deploying tasks across
-multiple hosts.
+the database on a network filesystem. Task records and elicitation transitions
+use the same transactional database so a task can be polled or resumed on
+either replica. Use a shared transactional database designed for multi-host
+deployments before scaling beyond one Docker host.
 
 ## OAuth resource-server integration
 

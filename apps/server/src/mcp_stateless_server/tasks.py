@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import hmac
+import json
 import secrets
-from collections.abc import Callable, Sequence
+import sqlite3
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from threading import RLock
 from typing import Any, Literal
 
@@ -85,14 +89,100 @@ class _TaskRecord:
 
 
 class ReindexTaskStore:
-    """Thread-safe, expiring task state shared by server instances in the demo."""
+    """Thread-safe, expiring tasks, optionally persisted for shared replicas."""
 
-    def __init__(self, *, clock: Callable[[], float] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        clock: Callable[[], float] | None = None,
+        database_path: str | Path | None = None,
+    ) -> None:
         import time
 
         self._clock = clock or time.monotonic
         self._lock = RLock()
         self._tasks: dict[str, _TaskRecord] = {}
+        self._database_path = str(database_path) if database_path is not None else None
+        if self._database_path is not None:
+            Path(self._database_path).parent.mkdir(parents=True, exist_ok=True)
+            with sqlite3.connect(self._database_path, timeout=15) as connection:
+                connection.execute("PRAGMA journal_mode=WAL")
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS reindex_tasks ("
+                    "task_id TEXT PRIMARY KEY, record_json TEXT NOT NULL, expires_at REAL NOT NULL)"
+                )
+
+    @contextmanager
+    def _transaction(self) -> Iterator[None]:
+        """Serialize task transitions across threads and optional DB-backed replicas."""
+        with self._lock:
+            if self._database_path is None:
+                yield
+                return
+            connection = sqlite3.connect(self._database_path, timeout=15)
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                rows = connection.execute(
+                    "SELECT task_id, record_json FROM reindex_tasks WHERE expires_at > ?",
+                    (self._clock(),),
+                ).fetchall()
+                self._tasks = {
+                    task_id: self._record_from_json(record_json) for task_id, record_json in rows
+                }
+                yield
+                now = self._clock()
+                connection.execute("DELETE FROM reindex_tasks WHERE expires_at <= ?", (now,))
+                connection.executemany(
+                    "INSERT INTO reindex_tasks(task_id, record_json, expires_at) "
+                    "VALUES (?, ?, ?) ON CONFLICT(task_id) DO UPDATE SET "
+                    "record_json = excluded.record_json, expires_at = excluded.expires_at",
+                    [
+                        (task_id, self._record_to_json(record), record.expires_at)
+                        for task_id, record in self._tasks.items()
+                        if record.expires_at > now
+                    ],
+                )
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+            finally:
+                connection.close()
+
+    @staticmethod
+    def _record_to_json(record: _TaskRecord) -> str:
+        return json.dumps(
+            {
+                "state": json.loads(record.state.model_dump_json(by_alias=True)),
+                "owner": record.owner,
+                "expires_at": record.expires_at,
+                "note_ids": record.note_ids,
+                "fail": record.fail,
+                "include_archived": record.include_archived,
+                "input_request": (
+                    json.loads(record.input_request.model_dump_json(by_alias=True))
+                    if record.input_request is not None
+                    else None
+                ),
+            },
+            separators=(",", ":"),
+        )
+
+    @staticmethod
+    def _record_from_json(value: str) -> _TaskRecord:
+        payload = json.loads(value)
+        input_request = payload["input_request"]
+        return _TaskRecord(
+            state=TaskState.model_validate(payload["state"]),
+            owner=payload["owner"],
+            expires_at=payload["expires_at"],
+            note_ids=tuple(payload["note_ids"]),
+            fail=payload["fail"],
+            include_archived=payload["include_archived"],
+            input_request=ElicitRequest.model_validate(input_request)
+            if input_request is not None
+            else None,
+        )
 
     def create(
         self,
@@ -112,7 +202,7 @@ class ReindexTaskStore:
             ttlMs=TASK_TTL_MS,
             pollIntervalMs=TASK_EARLY_POLL_MS,
         )
-        with self._lock:
+        with self._transaction():
             self._tasks[state.task_id] = _TaskRecord(
                 state=state,
                 owner=owner,
@@ -124,7 +214,7 @@ class ReindexTaskStore:
 
     def get(self, task_id: str, owner: str, *, advance: bool = True) -> TaskState | None:
         """Read and deterministically advance one task, hiding unauthorized IDs."""
-        with self._lock:
+        with self._transaction():
             record = self._record(task_id, owner)
             if record is None:
                 return None
@@ -157,7 +247,7 @@ class ReindexTaskStore:
 
     def update(self, task_id: str, owner: str, responses: InputResponses) -> TaskState | None:
         """Consume one task-time elicitation response exactly once."""
-        with self._lock:
+        with self._transaction():
             record = self._record(task_id, owner)
             if record is None:
                 return None
@@ -204,7 +294,7 @@ class ReindexTaskStore:
 
     def cancel(self, task_id: str, owner: str) -> TaskState | None:
         """Cancel a non-terminal task; terminal outcomes remain idempotent."""
-        with self._lock:
+        with self._transaction():
             record = self._record(task_id, owner)
             if record is None:
                 return None
