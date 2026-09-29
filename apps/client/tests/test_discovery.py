@@ -1,5 +1,7 @@
 """Black-box tests for raw stateless discovery."""
 
+from typing import Any
+
 import pytest
 from mcp_stateless_client.config import ClientConfig
 from mcp_stateless_client.discovery import ProtocolError, discover, verify
@@ -27,7 +29,21 @@ def test_verifies_stateless_wire_contract(live_server_url: str) -> None:
         "protocol_version",
         "server_identity",
         "stateless_transport",
+        "concurrent_stateless_requests",
     }
+
+
+def test_discovers_after_server_restart(restartable_server: Any) -> None:
+    config = ClientConfig(server_url=restartable_server.url)
+    before_restart = discover(config, request_id=41)
+
+    restartable_server.stop()
+    restartable_server.start()
+    after_restart = discover(config, request_id=42)
+
+    assert before_restart.server_info == after_restart.server_info
+    assert after_restart.request_id == 42
+    assert "mcp-session-id" not in after_restart.headers
 
 
 def test_reports_incompatible_pinned_version(live_server_url: str) -> None:
