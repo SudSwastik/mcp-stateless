@@ -1,7 +1,50 @@
-services:
-  server:
+x-server: &server
     build:
       context: ..
       dockerfile: apps/server/Dockerfile
+    environment:
+      MCP_STATE_DB_PATH: /data/notes.sqlite3
+      MCP_SUBSCRIPTION_REDIS_URL: redis://redis:6379/0
+    volumes:
+      - notes-state:/data
+    depends_on:
+      state-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+services:
+  state-init:
+    build:
+      context: ..
+      dockerfile: apps/server/Dockerfile
+    user: "0:0"
+    command: ["sh", "-c", "chown -R app:app /data"]
+    volumes:
+      - notes-state:/data
+    restart: "no"
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 1s
+      retries: 15
+  server-a:
+    <<: *server
+  server-b:
+    <<: *server
+  gateway:
+    image: nginx:stable-alpine
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8000:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - server-a
+      - server-b
+
+volumes:
+  notes-state:

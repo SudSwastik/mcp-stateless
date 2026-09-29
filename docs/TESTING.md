@@ -210,7 +210,19 @@ Repeat the discovery request from the live-server section.
 docker compose --file infra/compose.yaml up --build
 ```
 
-Run the discovery smoke test against `http://127.0.0.1:8000/mcp`, then stop and remove the Compose resources:
+This starts two server replicas behind the gateway, with shared SQLite note
+state and Redis-backed subscription fan-out. Run discovery and a cross-replica
+mutation check against `http://127.0.0.1:8000/mcp`, then stop the stack:
+
+```bash
+uv run mcp-stateless-client verify --url http://127.0.0.1:8000/mcp
+uv run mcp-stateless-client call create_note --arguments '{"title":"Replica smoke test","body":"Shared state check."}' --url http://127.0.0.1:8000/mcp
+uv run mcp-stateless-client call search_notes --arguments '{"query":"Replica smoke test"}' --url http://127.0.0.1:8000/mcp
+```
+
+The client’s independent requests are load-balanced across the two servers.
+SQLite is appropriate here only because both containers use the same local
+Docker named volume; this Compose setup is not a multi-host production database.
 
 ```bash
 docker compose --file infra/compose.yaml down
