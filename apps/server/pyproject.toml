@@ -8,6 +8,7 @@ dependencies = [
     "mcp[cli]==2.2.0",
     "pydantic>=2.11.9,<3",
     "PyJWT[crypto]>=2.10,<3",
+    "redis>=5.2,<7",
     "uvicorn>=0.37.0,<1",
 ]
 
