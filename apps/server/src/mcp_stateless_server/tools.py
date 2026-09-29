@@ -35,6 +35,12 @@ from mcp_stateless_server.models import (
 )
 from mcp_stateless_server.pagination import CursorError
 from mcp_stateless_server.store import NoteStore
+from mcp_stateless_server.tasks import (
+    TASKS_EXTENSION_ID,
+    ReindexNotesResult,
+    ReindexTaskStore,
+    task_owner,
+)
 
 
 class NoteTitle(BaseModel):
@@ -61,7 +67,7 @@ class PublishConfirmation(BaseModel):
     confirm: bool
 
 
-def register_tools(mcp: MCPServer, store: NoteStore) -> None:
+def register_tools(mcp: MCPServer, store: NoteStore, tasks: ReindexTaskStore) -> None:
     """Register deterministic tools on the supplied server."""
 
     @mcp.tool()
@@ -275,6 +281,27 @@ def register_tools(mcp: MCPServer, store: NoteStore) -> None:
             ],
             structured_content=result.model_dump(mode="json"),
         )
+
+    @mcp.tool()
+    def reindex_notes(
+        ctx: Context,
+        simulate_failure: bool = False,
+    ) -> ReindexNotesResult:
+        """Reindex notes, returning a task handle when the client supports tasks."""
+        note_ids = [note.note_id for note in store.list_notes()]
+        capabilities = ctx.client_capabilities
+        if (
+            ctx.protocol_version == "2026-07-28"
+            and capabilities is not None
+            and TASKS_EXTENSION_ID in (capabilities.extensions or {})
+        ):
+            task = tasks.create(
+                task_owner(ctx.request_context), note_ids, fail=simulate_failure
+            )
+            return ReindexNotesResult(action="task_started", task=task)
+        if simulate_failure:
+            return ReindexNotesResult(action="failed", indexed_note_ids=[])
+        return ReindexNotesResult(action="completed", indexed_note_ids=note_ids)
 
 
 def _request_state_key(request_state: str | None) -> str | None:

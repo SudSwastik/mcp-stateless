@@ -23,9 +23,13 @@ The server also exposes:
 
 - completion for `summarize_note` note IDs and styles;
 - completion for the `notes://{note_id}` resource template;
-- the derived JSON resource `notes://stats`.
+- the derived JSON resource `notes://stats`;
 - `connect_provider` demonstrates URL-mode out-of-band authorization. Its demo
   endpoint receives no credentials or authorization codes through MCP.
+- `reindex_notes` falls back to a synchronous result for ordinary clients and
+  returns an expiring task handle to clients that advertise the server's task
+  extension. Poll and update the task with `tasks/get` and `tasks/update`; no
+  task-list endpoint is exposed.
 
 ## Test
 
