@@ -31,3 +31,28 @@ def test_search_page_cursor_resumes_without_server_state() -> None:
     assert first.total == 3
     assert [note.note_id for note in second.notes] == ["3"]
     assert second.next_cursor is None
+
+
+def test_create_is_idempotent_for_an_accepted_operation() -> None:
+    store = NoteStore()
+
+    created, changed = store.create("Once", "Created once.", idempotency_key="op-1")
+    replayed, replay_changed = store.create("Once", "Created once.", idempotency_key="op-1")
+
+    assert created == replayed
+    assert changed is True
+    assert replay_changed is False
+    assert len(store.list_notes()) == 4
+
+
+def test_delete_is_idempotent_for_an_accepted_operation() -> None:
+    store = NoteStore()
+
+    deleted, changed = store.delete("2", idempotency_key="op-2")
+    replayed, replay_changed = store.delete("2", idempotency_key="op-2")
+
+    assert deleted is not None
+    assert deleted == replayed
+    assert changed is True
+    assert replay_changed is False
+    assert store.get("2") is None

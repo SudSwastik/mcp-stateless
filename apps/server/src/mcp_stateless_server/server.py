@@ -4,6 +4,7 @@ from typing import cast
 
 from mcp.server import MCPServer
 from mcp.server.caching import CacheHint
+from mcp.server.mcpserver import RequestStateSecurity
 from mcp.server.subscriptions import InMemorySubscriptionBus, SubscriptionBus
 from mcp_types.methods import CACHEABLE_METHODS, CacheableMethod
 
@@ -18,6 +19,7 @@ def create_server(
     store: NoteStore | None = None,
     *,
     subscriptions: SubscriptionBus | None = None,
+    request_state_security: RequestStateSecurity | None = None,
 ) -> MCPServer:
     """Build an isolated MCP server instance."""
     note_store = store or NoteStore()
@@ -30,8 +32,9 @@ def create_server(
             for method in CACHEABLE_METHODS
         },
         subscriptions=event_bus,
+        request_state_security=request_state_security,
     )
-    register_tools(server, note_store, event_bus)
+    register_tools(server, note_store)
     register_resources(server, note_store)
     register_prompts(server, note_store)
     register_completions(server, note_store)
