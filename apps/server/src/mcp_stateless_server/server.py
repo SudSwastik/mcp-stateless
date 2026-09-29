@@ -17,6 +17,7 @@ from mcp_stateless_server.auth import auth_settings_from_env, jwt_verifier_from_
 from mcp_stateless_server.completions import register_completions
 from mcp_stateless_server.prompts import register_prompts
 from mcp_stateless_server.resources import register_resources
+from mcp_stateless_server.sqlite_store import SQLiteNoteStore
 from mcp_stateless_server.store import NoteStore
 from mcp_stateless_server.subscriptions import (
     CloseRedisBusOnShutdown,
@@ -68,7 +69,9 @@ mcp_subscription_bus = (
     if os.environ.get("MCP_SUBSCRIPTION_REDIS_URL")
     else None
 )
+mcp_state_path = os.environ.get("MCP_STATE_DB_PATH")
 mcp = create_server(
+    store=SQLiteNoteStore(mcp_state_path) if mcp_state_path else None,
     subscriptions=mcp_subscription_bus,
     auth=mcp_auth,
     token_verifier=jwt_verifier_from_env(mcp_auth),
