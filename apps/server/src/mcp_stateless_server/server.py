@@ -1,5 +1,6 @@
 """Application factory and ASGI entry point."""
 
+import os
 from typing import cast
 
 from mcp.server import MCPServer
@@ -9,6 +10,7 @@ from mcp.server.caching import CacheHint
 from mcp.server.mcpserver import RequestStateSecurity
 from mcp.server.subscriptions import InMemorySubscriptionBus, SubscriptionBus
 from mcp_types.methods import CACHEABLE_METHODS, CacheableMethod
+from starlette.types import ASGIApp
 
 from mcp_stateless_server.apps import AppsExtension, register_apps
 from mcp_stateless_server.auth import auth_settings_from_env, jwt_verifier_from_env
@@ -16,6 +18,10 @@ from mcp_stateless_server.completions import register_completions
 from mcp_stateless_server.prompts import register_prompts
 from mcp_stateless_server.resources import register_resources
 from mcp_stateless_server.store import NoteStore
+from mcp_stateless_server.subscriptions import (
+    CloseRedisBusOnShutdown,
+    RedisSubscriptionBus,
+)
 from mcp_stateless_server.tasks import ReindexTaskStore, TasksExtension
 from mcp_stateless_server.tools import register_tools
 
@@ -57,5 +63,17 @@ def create_server(
 
 
 mcp_auth = auth_settings_from_env()
-mcp = create_server(auth=mcp_auth, token_verifier=jwt_verifier_from_env(mcp_auth))
-app = mcp.streamable_http_app()
+mcp_subscription_bus = (
+    RedisSubscriptionBus.from_url(os.environ["MCP_SUBSCRIPTION_REDIS_URL"])
+    if os.environ.get("MCP_SUBSCRIPTION_REDIS_URL")
+    else None
+)
+mcp = create_server(
+    subscriptions=mcp_subscription_bus,
+    auth=mcp_auth,
+    token_verifier=jwt_verifier_from_env(mcp_auth),
+)
+_asgi_app: ASGIApp = mcp.streamable_http_app()
+if mcp_subscription_bus is not None:
+    _asgi_app = CloseRedisBusOnShutdown(_asgi_app, mcp_subscription_bus)
+app = _asgi_app

@@ -24,6 +24,14 @@ and enables token-resource validation. The app fails to start if OAuth
 configuration is incomplete; default `MCP_AUTH_MODE=none` retains the local
 loopback behavior.
 
+For multi-process deployments, set `MCP_SUBSCRIPTION_REDIS_URL` to a shared
+Redis URL on every replica. The module-level ASGI app then uses Redis Pub/Sub
+to fan resource and catalog change events across processes and closes the
+Redis client on shutdown. Redis Pub/Sub is best-effort; notifications are
+invalidation hints, so clients should refetch current data after receiving one.
+`create_server(subscriptions=...)` remains the injection point for another
+implementation of the SDK's `SubscriptionBus` protocol.
+
 The bundled verifier accepts signed JWT access tokens and validates the
 signature against the configured JWKS, exact issuer, resource audience,
 expiration, and configured scopes. Opaque-token introspection is not included;
