@@ -36,6 +36,11 @@ def _add_connection_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--protocol-version", help="pinned MCP protocol version")
     parser.add_argument("--timeout", type=float, help="request timeout in seconds")
     parser.add_argument("--output", choices=("text", "json"), help="output format")
+    parser.add_argument(
+        "--elicitation-policy",
+        choices=("interactive", "accept", "decline", "cancel"),
+        help="handle form elicitation interactively or with a deterministic action",
+    )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -85,6 +90,7 @@ def _config(args: argparse.Namespace) -> ClientConfig:
         protocol_version=args.protocol_version,
         request_timeout_seconds=args.timeout,
         output_format=args.output,
+        elicitation_policy=args.elicitation_policy,
     )
 
 

@@ -40,6 +40,7 @@ from mcp_stateless_client.discovery import (
     discover,
     verify,
 )
+from mcp_stateless_client.elicitation import make_elicitation_callback
 
 
 class CommandInputError(ClientError):
@@ -104,6 +105,11 @@ def _client(config: ClientConfig, prior_discover: DiscoverResult | None = None) 
             client_info=Implementation(name=CLIENT_NAME, version=CLIENT_VERSION),
             read_timeout_seconds=config.request_timeout_seconds,
             cache=config.response_cache,
+            elicitation_callback=(
+                make_elicitation_callback(config.elicitation_policy)
+                if config.elicitation_policy is not None
+                else None
+            ),
         )
     except ValueError as exc:
         raise ProtocolError(

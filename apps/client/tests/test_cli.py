@@ -6,9 +6,7 @@ import pytest
 from mcp_stateless_client.cli import main
 
 
-def test_verify_json_output(
-    live_server_url: str, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_verify_json_output(live_server_url: str, capsys: pytest.CaptureFixture[str]) -> None:
     exit_code = main(["verify", "--url", live_server_url, "--output", "json"])
 
     assert exit_code == 0
@@ -53,6 +51,93 @@ def test_call_command_returns_structured_json(
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["structuredContent"] == {"result": 7}
+
+
+@pytest.mark.parametrize(
+    ("policy", "expected_action"),
+    [("accept", "created"), ("decline", "declined"), ("cancel", "cancelled")],
+)
+def test_call_command_handles_mrtr_policies_over_http(
+    live_server_url: str,
+    capsys: pytest.CaptureFixture[str],
+    policy: str,
+    expected_action: str,
+) -> None:
+    exit_code = main(
+        [
+            "call",
+            "create_note",
+            "--arguments",
+            '{"body": "Created by the CLI."}',
+            "--url",
+            live_server_url,
+            "--elicitation-policy",
+            policy,
+            "--output",
+            "json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    outcome = payload["structuredContent"]
+    assert outcome["action"] == expected_action
+    if policy == "accept":
+        assert outcome["note"]["title"] == "Elicited title"
+    else:
+        assert outcome["note"] is None
+
+
+def test_call_command_interactively_collects_form_values(
+    live_server_url: str,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    answers = iter(("a", "Interactive title"))
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    exit_code = main(
+        [
+            "call",
+            "create_note",
+            "--arguments",
+            '{"body": "Created interactively."}',
+            "--url",
+            live_server_url,
+            "--elicitation-policy",
+            "interactive",
+            "--output",
+            "json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["structuredContent"]["note"]["title"] == "Interactive title"
+
+
+def test_call_command_accepts_delete_confirmation_over_http(
+    live_server_url: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(
+        [
+            "call",
+            "delete_note",
+            "--arguments",
+            '{"note_id": "2"}',
+            "--url",
+            live_server_url,
+            "--elicitation-policy",
+            "accept",
+            "--output",
+            "json",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["structuredContent"]["action"] == "deleted"
 
 
 def test_read_and_prompt_commands_render_text(
