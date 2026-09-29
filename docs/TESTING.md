@@ -31,7 +31,7 @@ uv run mypy apps
 Expected result:
 
 ```text
-10 passed
+19 passed
 All checks passed!
 Success: no issues found
 ```
@@ -63,6 +63,37 @@ uv run pytest -vv apps/server/tests
 ```
 
 The protocol tests use the SDK's in-memory client. They exercise real MCP request handling without opening a port or starting a subprocess.
+
+## Run client tests
+
+```bash
+uv run pytest apps/client/tests
+```
+
+The client suite starts the server as a separate process on an ephemeral
+loopback port. Client tests communicate only through HTTP and never import
+server application code.
+
+## Run the compatibility client
+
+Start the server as shown below, then inspect its advertised protocol contract:
+
+```bash
+uv run mcp-stateless-client inspect \
+  --url http://127.0.0.1:8000/mcp
+```
+
+Run the non-mutating raw-wire checks:
+
+```bash
+uv run mcp-stateless-client verify \
+  --url http://127.0.0.1:8000/mcp
+```
+
+For automation, append `--output json`. A successful verification confirms
+JSON-RPC request correlation, pinned-version compatibility, server identity,
+capability discovery, independent requests without `Mcp-Session-Id`, and
+rejection of mismatched routing headers.
 
 ## Test the live Streamable HTTP server
 
@@ -177,6 +208,7 @@ uv run pytest
 uv run ruff check .
 uv run mypy apps
 docker build --file apps/server/Dockerfile --tag mcp-stateless-server:test .
+docker build --file apps/client/Dockerfile --tag mcp-stateless-client:test .
 git diff --check
 ```
 

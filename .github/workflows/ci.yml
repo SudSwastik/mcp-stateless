@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  server:
+  quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,3 +22,5 @@ jobs:
       - run: uv run pytest
       - run: uv run ruff check .
       - run: uv run mypy apps
+      - run: docker build --file apps/server/Dockerfile --tag mcp-stateless-server:test .
+      - run: docker build --file apps/client/Dockerfile --tag mcp-stateless-client:test .

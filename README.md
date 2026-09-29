@@ -33,9 +33,19 @@ A deterministic MCP server for exercising core primitives, stateless requests, e
 
 See the [implementation plan](docs/IMPLEMENTATION_PLAN.md) for scope and delivery phases, and the [testing guide](docs/TESTING.md) for validation commands.
 
-## Status
+## Quick verification
 
-The server foundation is being implemented first. The client will follow against the server's tested protocol contract.
+Start the server in one terminal:
+
+```bash
+uv run uvicorn mcp_stateless_server.server:app --host 127.0.0.1 --port 8000
+```
+
+Then run the independent client in another terminal:
+
+```bash
+uv run mcp-stateless-client verify
+```
 
 ## References
 

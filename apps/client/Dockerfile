@@ -8,15 +8,15 @@ RUN groupadd --system app && useradd --system --gid app --home-dir /app app
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
-COPY apps/server/pyproject.toml apps/server/README.md apps/server/
 COPY apps/client/pyproject.toml apps/client/README.md apps/client/
-COPY apps/server/src apps/server/src
+COPY apps/server/pyproject.toml apps/server/README.md apps/server/
+COPY apps/client/src apps/client/src
 
-RUN uv sync --frozen --no-dev --package mcp-stateless-server
+RUN uv sync --frozen --no-dev --package mcp-stateless-client
 
 ENV PATH="/app/.venv/bin:$PATH"
 
 USER app
-EXPOSE 8000
 
-CMD ["uvicorn", "mcp_stateless_server.server:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["mcp-stateless-client"]
+CMD ["verify"]
