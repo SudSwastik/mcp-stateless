@@ -12,6 +12,8 @@ async def test_lists_core_tools(server: MCPServer) -> None:
         result = await client.list_tools()
 
     assert [tool.name for tool in result.tools] == ["add", "search_notes"]
+    assert result.ttl_ms == 30_000
+    assert result.cache_scope == "public"
 
 
 @pytest.mark.anyio

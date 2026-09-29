@@ -5,7 +5,10 @@ import json
 import pytest
 from mcp import Client
 from mcp.server import MCPServer
+from mcp.server.subscriptions import InMemorySubscriptionBus
+from mcp.shared.subscriptions import PromptsListChanged, ToolsListChanged
 from mcp.types import TextResourceContents
+from mcp_stateless_server.server import create_server
 
 
 @pytest.mark.anyio
@@ -46,3 +49,18 @@ async def test_reads_structured_note_stats(server: MCPServer) -> None:
     contents = result.contents[0]
     assert isinstance(contents, TextResourceContents)
     assert json.loads(contents.text) == {"total_notes": 3, "total_words": 16}
+
+
+@pytest.mark.anyio
+async def test_listen_receives_requested_change_events_only() -> None:
+    bus = InMemorySubscriptionBus()
+    server = create_server(subscriptions=bus)
+
+    async with Client(server) as client, client.listen(
+        tools_list_changed=True
+    ) as subscription:
+        await bus.publish(PromptsListChanged())
+        await bus.publish(ToolsListChanged())
+        event = await anext(subscription)
+
+    assert isinstance(event, ToolsListChanged)
