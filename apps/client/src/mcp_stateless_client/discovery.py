@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 from urllib.error import HTTPError, URLError
@@ -267,6 +268,27 @@ def _routing_mismatch_check(config: ClientConfig) -> VerificationCheck:
     )
 
 
+def _concurrent_request_check(config: ClientConfig) -> VerificationCheck:
+    request_ids = (10, 11, 12, 13)
+    with ThreadPoolExecutor(max_workers=len(request_ids)) as executor:
+        observations = tuple(
+            executor.map(lambda request_id: discover(config, request_id=request_id), request_ids)
+        )
+
+    correlated = tuple(observation.request_id for observation in observations) == request_ids
+    stateless = all("mcp-session-id" not in observation.headers for observation in observations)
+    passed = correlated and stateless
+    return VerificationCheck(
+        name="concurrent_stateless_requests",
+        passed=passed,
+        detail=(
+            "four concurrent requests preserved their IDs without protocol sessions"
+            if passed
+            else "concurrent requests lost correlation or returned protocol session state"
+        ),
+    )
+
+
 def verify(config: ClientConfig) -> VerificationReport:
     """Run non-mutating wire checks against independent HTTP requests."""
     first = discover(config, request_id=1)
@@ -318,6 +340,7 @@ def verify(config: ClientConfig) -> VerificationReport:
             ),
         ),
         _routing_mismatch_check(config),
+        _concurrent_request_check(config),
     )
     return VerificationReport(
         server_url=config.server_url,
