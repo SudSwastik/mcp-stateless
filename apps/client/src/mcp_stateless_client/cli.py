@@ -28,6 +28,7 @@ from mcp_stateless_client.primitives import (
     inspect_catalog,
     listen,
     read_resource,
+    verify_apps,
 )
 
 
@@ -54,6 +55,10 @@ def _parser() -> argparse.ArgumentParser:
         "verify", help="run wire and primitive compatibility checks"
     )
     _add_connection_options(verify_parser)
+    apps_parser = subparsers.add_parser(
+        "verify-apps", help="verify MCP Apps negotiation and dashboard compatibility"
+    )
+    _add_connection_options(apps_parser)
 
     call_parser = subparsers.add_parser("call", help="call a tool")
     call_parser.add_argument("tool", help="tool name")
@@ -202,6 +207,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                     print(f"[{marker}] {check.name}: {check.detail}")
                 print("Verification passed." if report.passed else "Verification failed.")
             return 0 if report.passed else 1
+
+        if args.command == "verify-apps":
+            apps_report = verify_apps(config)
+            if config.output_format == "json":
+                _print_json(apps_report.to_dict())
+            else:
+                for check in apps_report.checks:
+                    marker = "PASS" if check.passed else "FAIL"
+                    print(f"[{marker}] {check.name}: {check.detail}")
+                print(
+                    "Apps verification passed."
+                    if apps_report.passed
+                    else "Apps verification failed."
+                )
+            return 0 if apps_report.passed else 1
 
         if args.command == "call":
             tool_result = call_tool(config, args.tool, _parse_arguments(args.arguments))
