@@ -1,5 +1,7 @@
 """Task lifecycle tests for deterministic note reindexing."""
 
+from pathlib import Path
+
 import pytest
 from mcp import Client
 from mcp.client import advertise
@@ -186,3 +188,68 @@ async def test_task_handle_can_resume_on_another_server_instance() -> None:
 
     assert waiting.status == "input_required"
     assert waiting.input_requests is not None
+
+
+@pytest.mark.anyio
+async def test_task_handle_transitions_are_shared_by_separate_sqlite_stores(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "state.sqlite3"
+    first_store = ReindexTaskStore(database_path=database)
+    second_store = ReindexTaskStore(database_path=database)
+    first_server = create_server(task_store=first_store)
+    second_server = create_server(task_store=second_store)
+
+    async with _task_client(first_server) as creator:
+        started = await creator.call_tool("reindex_notes", {})
+        assert started.structured_content is not None
+        task_id = TaskState.model_validate(started.structured_content["task"]).task_id
+
+    async with _task_client(second_server) as poller:
+        waiting = await poller.session.send_request(
+            GetTaskRequest(params=GetTaskRequestParams(task_id=task_id)), TaskState
+        )
+
+    assert waiting.status == "input_required"
+    assert waiting.input_requests is not None
+    assert isinstance(
+        waiting.input_requests["reindex_notes:include_archived"].params,
+        ElicitRequestFormParams,
+    )
+
+    async with _task_client(first_server) as responder:
+        resumed = await responder.session.send_request(
+            TaskUpdateRequest(
+                params=TaskUpdateParams(
+                    task_id=task_id,
+                    input_responses={
+                        "reindex_notes:include_archived": ElicitResult(
+                            action="accept", content={"include_archived": True}
+                        )
+                    },
+                )
+            ),
+            TaskState,
+        )
+    async with _task_client(second_server) as poller:
+        completed = await poller.session.send_request(
+            GetTaskRequest(params=GetTaskRequestParams(task_id=task_id)), TaskState
+        )
+
+    assert resumed.status == "working"
+    assert completed.status == "completed"
+    assert completed.result == {
+        "indexed_note_ids": ["1", "2", "3"],
+        "include_archived": True,
+    }
+
+
+def test_persisted_task_expiry_is_enforced_across_store_instances(tmp_path: Path) -> None:
+    now = [0.0]
+    database = tmp_path / "tasks.sqlite3"
+    creator = ReindexTaskStore(database_path=database, clock=lambda: now[0])
+    task = creator.create("alice", ["1"])
+
+    now[0] = 61.0
+    reader = ReindexTaskStore(database_path=database, clock=lambda: now[0])
+    assert reader.get(task.task_id, "alice") is None

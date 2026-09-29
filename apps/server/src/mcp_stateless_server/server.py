@@ -72,6 +72,7 @@ mcp_subscription_bus = (
 mcp_state_path = os.environ.get("MCP_STATE_DB_PATH")
 mcp = create_server(
     store=SQLiteNoteStore(mcp_state_path) if mcp_state_path else None,
+    task_store=ReindexTaskStore(database_path=mcp_state_path) if mcp_state_path else None,
     subscriptions=mcp_subscription_bus,
     auth=mcp_auth,
     token_verifier=jwt_verifier_from_env(mcp_auth),
