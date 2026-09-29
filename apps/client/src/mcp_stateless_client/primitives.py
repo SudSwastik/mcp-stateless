@@ -9,6 +9,7 @@ from typing import Any
 
 from httpx2 import TransportError as HttpTransportError
 from mcp import Client
+from mcp.client import advertise
 from mcp.shared.exceptions import MCPError
 from mcp.shared.subscriptions import ServerEvent
 from mcp_types import (
@@ -41,6 +42,10 @@ from mcp_stateless_client.discovery import (
     verify,
 )
 from mcp_stateless_client.elicitation import make_elicitation_callback
+
+APP_EXTENSION_ID = "io.modelcontextprotocol/ui"
+APP_MIME_TYPE = "text/html;profile=mcp-app"
+APP_TOOL_NAME = "note_dashboard"
 
 
 class CommandInputError(ClientError):
@@ -96,7 +101,33 @@ class CompatibilityReport:
         }
 
 
-def _client(config: ClientConfig, prior_discover: DiscoverResult | None = None) -> Client:
+@dataclass(frozen=True, slots=True)
+class AppsVerificationReport:
+    """MCP Apps capability and dashboard compatibility checks."""
+
+    server_url: str
+    checks: tuple[VerificationCheck, ...]
+    resource_uri: str | None
+
+    @property
+    def passed(self) -> bool:
+        return all(check.passed for check in self.checks)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "serverUrl": self.server_url,
+            "passed": self.passed,
+            "resourceUri": self.resource_uri,
+            "checks": [check.to_dict() for check in self.checks],
+        }
+
+
+def _client(
+    config: ClientConfig,
+    prior_discover: DiscoverResult | None = None,
+    *,
+    advertise_apps: bool = False,
+) -> Client:
     try:
         return Client(
             config.server_url,
@@ -108,6 +139,11 @@ def _client(config: ClientConfig, prior_discover: DiscoverResult | None = None) 
             elicitation_callback=(
                 make_elicitation_callback(config.elicitation_policy)
                 if config.elicitation_policy is not None
+                else None
+            ),
+            extensions=(
+                [advertise(APP_EXTENSION_ID, {"mimeTypes": [APP_MIME_TYPE]})]
+                if advertise_apps
                 else None
             ),
         )
@@ -385,3 +421,109 @@ def compatibility_report(config: ClientConfig) -> CompatibilityReport:
         catalog=catalog,
         primitive_checks=_primitive_checks(config, catalog),
     )
+
+
+async def _verify_apps(
+    config: ClientConfig,
+    discovery: DiscoveryObservation,
+) -> AppsVerificationReport:
+    checks: list[VerificationCheck] = []
+    server_extensions = discovery.result.capabilities.extensions or {}
+    checks.append(
+        VerificationCheck(
+            name="apps_extension",
+            passed=APP_EXTENSION_ID in server_extensions,
+            detail=(
+                "server advertises the MCP Apps extension"
+                if APP_EXTENSION_ID in server_extensions
+                else "server does not advertise the MCP Apps extension"
+            ),
+        )
+    )
+
+    async with _client(config, discovery.result, advertise_apps=True) as client:
+        tools = await client.list_tools()
+        tool = next((item for item in tools.tools if item.name == APP_TOOL_NAME), None)
+        tool_meta = tool.meta if tool is not None else None
+        ui_meta = tool_meta.get("ui") if isinstance(tool_meta, dict) else None
+        resource_uri = ui_meta.get("resourceUri") if isinstance(ui_meta, dict) else None
+        has_mapping = isinstance(resource_uri, str) and resource_uri.startswith("ui://")
+        checks.append(
+            VerificationCheck(
+                name="dashboard_tool",
+                passed=has_mapping,
+                detail=(
+                    f"{APP_TOOL_NAME} maps to {resource_uri}"
+                    if has_mapping
+                    else f"{APP_TOOL_NAME} or its ui.resourceUri metadata is missing"
+                ),
+            )
+        )
+
+        resource_ok = False
+        fallback_ok = False
+        if has_mapping:
+            assert isinstance(resource_uri, str)
+            resource = await client.read_resource(resource_uri)
+            resource_ok = any(
+                getattr(content, "mime_type", None) == APP_MIME_TYPE
+                and isinstance(getattr(content, "text", None), str)
+                for content in resource.contents
+            )
+            checks.append(
+                VerificationCheck(
+                    name="dashboard_resource",
+                    passed=resource_ok,
+                    detail=(
+                        f"resource is readable as {APP_MIME_TYPE}"
+                        if resource_ok
+                        else f"resource is missing or not {APP_MIME_TYPE}"
+                    ),
+                )
+            )
+            result = await client.call_tool(APP_TOOL_NAME, {})
+            structured = result.structured_content
+            fallback_ok = (
+                not result.is_error
+                and isinstance(structured, dict)
+                and isinstance(structured.get("notes"), list)
+                and isinstance(structured.get("total_notes"), int)
+            )
+            checks.append(
+                VerificationCheck(
+                    name="structured_fallback",
+                    passed=fallback_ok,
+                    detail=(
+                        "tool call returned structured notes for non-rendering clients"
+                        if fallback_ok
+                        else "tool call did not return the expected structured notes"
+                    ),
+                )
+            )
+        else:
+            checks.extend(
+                (
+                    VerificationCheck(
+                        name="dashboard_resource",
+                        passed=False,
+                        detail="skipped because the dashboard resource mapping is unavailable",
+                    ),
+                    VerificationCheck(
+                        name="structured_fallback",
+                        passed=False,
+                        detail="skipped because the dashboard tool is unavailable",
+                    ),
+                )
+            )
+
+    return AppsVerificationReport(
+        server_url=config.server_url,
+        checks=tuple(checks),
+        resource_uri=resource_uri if isinstance(resource_uri, str) else None,
+    )
+
+
+def verify_apps(config: ClientConfig) -> AppsVerificationReport:
+    """Advertise Apps support and verify dashboard metadata, resource, and fallback."""
+    observation = discover(config)
+    return _run(_verify_apps(config, observation))

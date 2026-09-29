@@ -16,6 +16,23 @@ def test_verify_json_output(live_server_url: str, capsys: pytest.CaptureFixture[
     assert payload["protocolVersion"] == "2026-07-28"
 
 
+def test_verify_apps_json_output(
+    live_server_url: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code = main(["verify-apps", "--url", live_server_url, "--output", "json"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["passed"] is True
+    assert payload["resourceUri"].startswith("ui://note-dashboard/")
+    assert {check["name"] for check in payload["checks"]} == {
+        "apps_extension",
+        "dashboard_tool",
+        "dashboard_resource",
+        "structured_fallback",
+    }
+
+
 def test_connection_failure_is_clear(capsys: pytest.CaptureFixture[str]) -> None:
     exit_code = main(
         [
