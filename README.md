@@ -1,12 +1,12 @@
 # MCP Stateless
 
-Blueprint for two independent Python applications that demonstrate and verify the stateless Model Context Protocol (MCP) `2026-07-28` release.
+Monorepo for two Python applications that demonstrate and verify the stateless Model Context Protocol (MCP) `2026-07-28` release.
 
 ## Architecture
 
 ```text
-Repository 1                                Repository 2
-mcp-stateless-client                       mcp-stateless-server
+Application 1                              Application 2
+apps/client                                apps/server
 
 +---------------------------+              +---------------------------+
 | Python MCP client         |   HTTP       | Python MCP server         |
@@ -17,25 +17,25 @@ mcp-stateless-client                       mcp-stateless-server
 +---------------------------+              +---------------------------+
 ```
 
-The repositories communicate only through MCP over Streamable HTTP. They do not share source code, models, fixtures, dependencies, or release pipelines.
+The applications communicate through MCP over Streamable HTTP and remain independently testable inside one repository.
 
 ## Applications
 
-### `mcp-stateless-client`
+### `apps/client` (`mcp-stateless-client`)
 
 An interactive CLI and black-box compatibility suite for testing local, containerized, or remotely deployed MCP servers.
 
-### `mcp-stateless-server`
+### `apps/server` (`mcp-stateless-server`)
 
 A deterministic MCP server for exercising core primitives, stateless requests, elicitation, and modern protocol extensions.
 
 ## Documentation
 
-See the [implementation plan](docs/IMPLEMENTATION_PLAN.md) for scope, repository layouts, delivery phases, testing, security requirements, and acceptance criteria.
+See the [implementation plan](docs/IMPLEMENTATION_PLAN.md) for scope and delivery phases, and the [testing guide](docs/TESTING.md) for validation commands.
 
 ## Status
 
-This repository contains the shared architecture and planning documentation. The client and server will be implemented and released as separate repositories.
+The server foundation is being implemented first. The client will follow against the server's tested protocol contract.
 
 ## References
 
