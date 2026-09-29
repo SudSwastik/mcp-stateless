@@ -8,6 +8,7 @@ from mcp.server.mcpserver import RequestStateSecurity
 from mcp.server.subscriptions import InMemorySubscriptionBus, SubscriptionBus
 from mcp_types.methods import CACHEABLE_METHODS, CacheableMethod
 
+from mcp_stateless_server.apps import AppsExtension, register_apps
 from mcp_stateless_server.completions import register_completions
 from mcp_stateless_server.prompts import register_prompts
 from mcp_stateless_server.resources import register_resources
@@ -36,9 +37,10 @@ def create_server(
         },
         subscriptions=event_bus,
         request_state_security=request_state_security,
-        extensions=[TasksExtension(reindex_tasks)],
+        extensions=[TasksExtension(reindex_tasks), AppsExtension()],
     )
     register_tools(server, note_store, reindex_tasks)
+    register_apps(server, note_store)
     register_resources(server, note_store)
     register_prompts(server, note_store)
     register_completions(server, note_store)
