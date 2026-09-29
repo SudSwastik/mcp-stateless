@@ -13,6 +13,22 @@ uv run uvicorn mcp_stateless_server.server:app --host 127.0.0.1 --port 8000
 
 The Streamable HTTP endpoint is `http://127.0.0.1:8000/mcp`.
 
+## OAuth resource-server integration
+
+The module-level development app remains unauthenticated for loopback use. A
+remote deployment can opt into the SDK's OAuth bearer middleware by loading
+`auth_settings_from_env()` and passing the returned settings together with a
+trusted `TokenVerifier` to `create_server(auth=..., token_verifier=...)` before
+calling `streamable_http_app()`. Configure `MCP_AUTH_MODE=oauth`,
+`MCP_OAUTH_ISSUER_URL`, `MCP_PUBLIC_BASE_URL`, and optionally
+`MCP_REQUIRED_SCOPES`. OAuth mode requires HTTPS issuer and resource URLs and
+enables token-resource validation.
+
+The deployment supplies the verifier for its identity provider. It must validate
+the signature, issuer, expiry, audience/resource, and token scopes; the SDK
+enforces expiry, configured scopes, and the returned resource indicator. Do not
+use a verifier that skips TLS validation or trusts unverified token claims.
+
 ## Primitive examples
 
 `search_notes` uses opaque cursors that are self-contained and bound to the

@@ -3,6 +3,8 @@
 from typing import cast
 
 from mcp.server import MCPServer
+from mcp.server.auth.provider import TokenVerifier
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.caching import CacheHint
 from mcp.server.mcpserver import RequestStateSecurity
 from mcp.server.subscriptions import InMemorySubscriptionBus, SubscriptionBus
@@ -23,8 +25,12 @@ def create_server(
     subscriptions: SubscriptionBus | None = None,
     request_state_security: RequestStateSecurity | None = None,
     task_store: ReindexTaskStore | None = None,
+    auth: AuthSettings | None = None,
+    token_verifier: TokenVerifier | None = None,
 ) -> MCPServer:
     """Build an isolated MCP server instance."""
+    if (auth is None) != (token_verifier is None):
+        raise ValueError("OAuth protection requires both AuthSettings and a TokenVerifier")
     note_store = store or NoteStore()
     reindex_tasks = task_store or ReindexTaskStore()
     event_bus = subscriptions if subscriptions is not None else InMemorySubscriptionBus()
@@ -38,6 +44,8 @@ def create_server(
         subscriptions=event_bus,
         request_state_security=request_state_security,
         extensions=[TasksExtension(reindex_tasks), AppsExtension()],
+        auth=auth,
+        token_verifier=token_verifier,
     )
     register_tools(server, note_store, reindex_tasks)
     register_apps(server, note_store)
