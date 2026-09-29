@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -26,13 +26,19 @@ CLIENT_VERSION = "0.1.0"
 class ClientError(RuntimeError):
     """Base error reported by the compatibility client."""
 
+    category: ClassVar[str] = "client"
+
 
 class TransportError(ClientError):
     """The endpoint could not be reached or returned an unreadable response."""
 
+    category = "transport"
+
 
 class ProtocolError(ClientError):
     """The peer returned an invalid or unsuccessful MCP response."""
+
+    category = "protocol"
 
 
 @dataclass(frozen=True, slots=True)

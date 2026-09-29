@@ -20,6 +20,18 @@ uv run mcp-stateless-client verify \
   --url http://127.0.0.1:8000/mcp
 ```
 
+## Use core primitives
+
+```bash
+uv run mcp-stateless-client call add \
+  --arguments '{"a": 2, "b": 3}'
+
+uv run mcp-stateless-client read notes://1
+
+uv run mcp-stateless-client prompt summarize_note \
+  --arguments '{"note_id": "1", "style": "brief"}'
+```
+
 Use `--output json` for a machine-readable result. The corresponding
 environment variables are:
 
@@ -30,6 +42,7 @@ MCP_REQUEST_TIMEOUT_SECONDS=15
 MCP_OUTPUT_FORMAT=text
 ```
 
-`verify` sends discovery over separate HTTP connections, validates JSON-RPC
-correlation and version compatibility, rejects protocol session state, and
-checks that a header/body routing mismatch fails with the specified error.
+`inspect` traverses all advertised tool, resource, resource-template, and
+prompt pages. `verify` adds catalog and schema checks to the raw transport
+checks and emits a compatibility report. `call`, `read`, and `prompt` use the
+pinned modern protocol directly without a legacy initialization handshake.

@@ -50,6 +50,9 @@ htmlcov/
 *.swo
 *~
 
+# Local code intelligence indexes
+.codegraph/
+
 # Operating system metadata
 .DS_Store
 Thumbs.db
