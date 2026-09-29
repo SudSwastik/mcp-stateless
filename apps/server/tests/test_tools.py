@@ -15,6 +15,7 @@ async def test_lists_core_tools(server: MCPServer) -> None:
         "add",
         "create_note",
         "delete_note",
+        "publish_note",
         "search_notes",
     ]
     assert result.ttl_ms == 30_000

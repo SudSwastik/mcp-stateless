@@ -43,3 +43,11 @@ class NoteMutationResult(BaseModel):
 
     action: Literal["created", "deleted", "declined", "cancelled", "not_found"]
     note: Note | None = None
+
+
+class PublishNoteResult(BaseModel):
+    """Outcome of a multi-round note publication workflow."""
+
+    action: Literal["published", "declined", "cancelled", "not_found"]
+    note_id: str
+    audience: Literal["team", "public"] | None = None

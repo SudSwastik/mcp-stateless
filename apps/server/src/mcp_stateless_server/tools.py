@@ -1,10 +1,11 @@
 """Core tool registrations."""
 
 import hashlib
-from typing import Annotated
+from typing import Annotated, Literal
 
 from mcp.server import MCPServer
 from mcp.server.mcpserver import (
+    AcceptedElicitation,
     CancelledElicitation,
     Context,
     DeclinedElicitation,
@@ -16,7 +17,12 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import CallToolResult, ResourceLink, TextContent
 from pydantic import BaseModel, Field
 
-from mcp_stateless_server.models import AddResult, NoteMutationResult, SearchNotesResult
+from mcp_stateless_server.models import (
+    AddResult,
+    NoteMutationResult,
+    PublishNoteResult,
+    SearchNotesResult,
+)
 from mcp_stateless_server.pagination import CursorError
 from mcp_stateless_server.store import NoteStore
 
@@ -29,6 +35,18 @@ class NoteTitle(BaseModel):
 
 class DeleteConfirmation(BaseModel):
     """Explicit confirmation for a destructive note deletion."""
+
+    confirm: bool
+
+
+class PublishAudience(BaseModel):
+    """Audience selected for a note publication."""
+
+    audience: Literal["team", "public"]
+
+
+class PublishConfirmation(BaseModel):
+    """Final confirmation to publish a note."""
 
     confirm: bool
 
@@ -56,6 +74,29 @@ def register_tools(mcp: MCPServer, store: NoteStore) -> None:
         return Elicit(
             message=f"Delete note {note_id}? This cannot be undone.",
             schema=DeleteConfirmation,
+        )
+
+    def resolve_publish_audience(
+        note_id: str,
+    ) -> PublishAudience | Elicit[PublishAudience]:
+        if store.get(note_id) is None:
+            return PublishAudience(audience="team")
+        return Elicit(
+            message="Who should be able to see this note?",
+            schema=PublishAudience,
+        )
+
+    def resolve_publish_confirmation(
+        note_id: str,
+        audience: Annotated[
+            ElicitationResult[PublishAudience], Resolve(resolve_publish_audience)
+        ],
+    ) -> PublishConfirmation | Elicit[PublishConfirmation]:
+        if store.get(note_id) is None or not isinstance(audience, AcceptedElicitation):
+            return PublishConfirmation(confirm=False)
+        return Elicit(
+            message=f"Publish this note to the {audience.data.audience}?",
+            schema=PublishConfirmation,
         )
 
     @mcp.tool()
@@ -108,6 +149,41 @@ def register_tools(mcp: MCPServer, store: NoteStore) -> None:
         if changed:
             await _notify_note_change(ctx, note.note_id)
         return NoteMutationResult(action="deleted", note=note)
+
+    @mcp.tool()
+    def publish_note(
+        note_id: str,
+        ctx: Context,
+        audience: Annotated[
+            ElicitationResult[PublishAudience], Resolve(resolve_publish_audience)
+        ],
+        confirmation: Annotated[
+            ElicitationResult[PublishConfirmation], Resolve(resolve_publish_confirmation)
+        ],
+    ) -> PublishNoteResult:
+        """Publish a note after sequential audience selection and confirmation."""
+        if store.get(note_id) is None:
+            return PublishNoteResult(action="not_found", note_id=note_id)
+        if isinstance(audience, DeclinedElicitation):
+            return PublishNoteResult(action="declined", note_id=note_id)
+        if isinstance(audience, CancelledElicitation):
+            return PublishNoteResult(action="cancelled", note_id=note_id)
+        if isinstance(confirmation, DeclinedElicitation):
+            return PublishNoteResult(action="declined", note_id=note_id)
+        if isinstance(confirmation, CancelledElicitation):
+            return PublishNoteResult(action="cancelled", note_id=note_id)
+        if not confirmation.data.confirm:
+            return PublishNoteResult(action="declined", note_id=note_id)
+        published_audience, _changed = store.publish(
+            note_id,
+            audience.data.audience,
+            idempotency_key=_request_state_key(ctx.request_state),
+        )
+        if published_audience is None:
+            return PublishNoteResult(action="not_found", note_id=note_id)
+        return PublishNoteResult(
+            action="published", note_id=note_id, audience=published_audience
+        )
 
     @mcp.tool()
     def search_notes(
