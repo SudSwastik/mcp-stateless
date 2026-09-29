@@ -551,6 +551,7 @@ source = { editable = "apps/server" }
 dependencies = [
     { name = "mcp", extra = ["cli"] },
     { name = "pydantic" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "uvicorn" },
 ]
 
@@ -558,6 +559,7 @@ dependencies = [
 requires-dist = [
     { name = "mcp", extras = ["cli"], specifier = "==2.2.0" },
     { name = "pydantic", specifier = ">=2.11.9,<3" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10,<3" },
     { name = "uvicorn", specifier = ">=0.37.0,<1" },
 ]
 

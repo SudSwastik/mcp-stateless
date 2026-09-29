@@ -11,6 +11,7 @@ from mcp.server.subscriptions import InMemorySubscriptionBus, SubscriptionBus
 from mcp_types.methods import CACHEABLE_METHODS, CacheableMethod
 
 from mcp_stateless_server.apps import AppsExtension, register_apps
+from mcp_stateless_server.auth import auth_settings_from_env, jwt_verifier_from_env
 from mcp_stateless_server.completions import register_completions
 from mcp_stateless_server.prompts import register_prompts
 from mcp_stateless_server.resources import register_resources
@@ -55,5 +56,6 @@ def create_server(
     return server
 
 
-mcp = create_server()
+mcp_auth = auth_settings_from_env()
+mcp = create_server(auth=mcp_auth, token_verifier=jwt_verifier_from_env(mcp_auth))
 app = mcp.streamable_http_app()

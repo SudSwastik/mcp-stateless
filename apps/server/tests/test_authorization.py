@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import json
 import time
 
+import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
+from jwt import PyJWKClient
 from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp_stateless_server.auth import (
     AuthenticationConfigurationError,
+    JwtJwksTokenVerifier,
     auth_settings_from_env,
+    jwt_verifier_from_env,
 )
 from mcp_stateless_server.server import create_server
 from starlette.testclient import TestClient
@@ -126,6 +132,15 @@ def test_oauth_settings_include_required_scopes_and_resource_validation() -> Non
     assert settings.validate_token_resource is True
 
 
+def test_jwt_verifier_configuration_requires_https_jwks() -> None:
+    settings = _auth_settings()
+    with pytest.raises(AuthenticationConfigurationError, match="requires MCP_OAUTH_JWKS_URL"):
+        jwt_verifier_from_env(settings, {})
+    with pytest.raises(AuthenticationConfigurationError, match="HTTPS"):
+        jwt_verifier_from_env(settings, {"MCP_OAUTH_JWKS_URL": "http://identity.example/keys"})
+    assert jwt_verifier_from_env(None, {}) is None
+
+
 def test_server_factory_requires_auth_and_verifier_together() -> None:
     with pytest.raises(ValueError, match="both AuthSettings and a TokenVerifier"):
         create_server(auth=_auth_settings())
@@ -199,3 +214,64 @@ def test_rejects_invalid_bearer_tokens(token: str, expected_status: int) -> None
         response = client.post("/mcp", headers=headers, json=body)
 
     assert response.status_code == expected_status
+
+
+@pytest.mark.anyio
+async def test_jwks_verifier_checks_signature_issuer_audience_and_expiry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    jwk = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(private_key.public_key()))
+    jwk.update({"kid": "test-key", "alg": "RS256", "use": "sig"})
+    jwks = {"keys": [jwk]}
+    monkeypatch.setattr(PyJWKClient, "fetch_data", lambda _client: jwks)
+    verifier = JwtJwksTokenVerifier(
+        issuer_url=ISSUER_URL,
+        audience=RESOURCE_URL,
+        jwks_url="https://identity.example/jwks",
+    )
+    now = int(time.time())
+    claims: dict[str, object] = {
+        "iss": ISSUER_URL,
+        "aud": RESOURCE_URL,
+        "exp": now + 60,
+        "iat": now,
+        "client_id": "test-client",
+        "sub": "user-42",
+        "scope": "notes:read notes:write notes:read",
+    }
+
+    def issue(overrides: dict[str, object] | None = None) -> str:
+        payload = {**claims, **(overrides or {})}
+        return jwt.encode(
+            payload,
+            private_key,
+            algorithm="RS256",
+            headers={"kid": "test-key", "typ": "at+jwt"},
+        )
+
+    valid_token = issue()
+    access = await verifier.verify_token(valid_token)
+    assert access is not None
+    assert access.client_id == "test-client"
+    assert access.subject == "user-42"
+    assert access.scopes == ["notes:read", "notes:write"]
+    assert access.resource == RESOURCE_URL
+
+    invalid_tokens = (
+        issue({"iss": "https://attacker.example/"}),
+        issue({"aud": "https://other.example/mcp"}),
+        issue({"exp": now - 60}),
+        issue({"client_id": None, "azp": None}),
+    )
+    for invalid_token in invalid_tokens:
+        assert await verifier.verify_token(invalid_token) is None
+
+    other_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    forged_signature = jwt.encode(
+        claims,
+        other_private_key,
+        algorithm="RS256",
+        headers={"kid": "test-key", "typ": "at+jwt"},
+    )
+    assert await verifier.verify_token(forged_signature) is None

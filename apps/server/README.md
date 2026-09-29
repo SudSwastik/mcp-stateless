@@ -17,17 +17,19 @@ The Streamable HTTP endpoint is `http://127.0.0.1:8000/mcp`.
 
 The module-level development app remains unauthenticated for loopback use. A
 remote deployment can opt into the SDK's OAuth bearer middleware by loading
-`auth_settings_from_env()` and passing the returned settings together with a
-trusted `TokenVerifier` to `create_server(auth=..., token_verifier=...)` before
-calling `streamable_http_app()`. Configure `MCP_AUTH_MODE=oauth`,
-`MCP_OAUTH_ISSUER_URL`, `MCP_PUBLIC_BASE_URL`, and optionally
-`MCP_REQUIRED_SCOPES`. OAuth mode requires HTTPS issuer and resource URLs and
-enables token-resource validation.
+`MCP_AUTH_MODE=oauth`, `MCP_OAUTH_ISSUER_URL`, `MCP_PUBLIC_BASE_URL`,
+`MCP_OAUTH_JWKS_URL`, and optionally `MCP_REQUIRED_SCOPES` before starting the
+module-level ASGI app. OAuth mode requires HTTPS issuer, resource, and JWKS URLs
+and enables token-resource validation. The app fails to start if OAuth
+configuration is incomplete; default `MCP_AUTH_MODE=none` retains the local
+loopback behavior.
 
-The deployment supplies the verifier for its identity provider. It must validate
-the signature, issuer, expiry, audience/resource, and token scopes; the SDK
-enforces expiry, configured scopes, and the returned resource indicator. Do not
-use a verifier that skips TLS validation or trusts unverified token claims.
+The bundled verifier accepts signed JWT access tokens and validates the
+signature against the configured JWKS, exact issuer, resource audience,
+expiration, and configured scopes. Opaque-token introspection is not included;
+deployments using opaque access tokens should instead provide their own trusted
+`TokenVerifier` to `create_server`. Do not disable TLS verification or trust
+unverified token claims.
 
 ## Primitive examples
 
