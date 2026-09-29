@@ -26,6 +26,13 @@ uv run mcp-stateless-client verify \
 uv run mcp-stateless-client call add \
   --arguments '{"a": 2, "b": 3}'
 
+uv run mcp-stateless-client call create_note \
+  --arguments '{"body": "Created by MCP."}'
+
+uv run mcp-stateless-client call delete_note \
+  --arguments '{"note_id": "2"}' \
+  --elicitation-policy accept
+
 uv run mcp-stateless-client read notes://1
 
 uv run mcp-stateless-client prompt summarize_note \
@@ -40,7 +47,14 @@ MCP_SERVER_URL=http://127.0.0.1:8000/mcp
 MCP_PROTOCOL_VERSION=2026-07-28
 MCP_REQUEST_TIMEOUT_SECONDS=15
 MCP_OUTPUT_FORMAT=text
+MCP_ELICITATION_POLICY=interactive
 ```
+
+Form elicitation is interactive by default. Set `--elicitation-policy` (or
+`MCP_ELICITATION_POLICY`) to `accept`, `decline`, or `cancel` for deterministic
+non-interactive runs. `accept` supplies schema-valid example values; for
+example, it uses `Elicited title` for a missing note title and confirms
+deletion.
 
 `inspect` traverses all advertised tool, resource, resource-template, and
 prompt pages. `verify` adds catalog and schema checks to the raw transport

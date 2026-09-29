@@ -15,6 +15,7 @@ DEFAULT_SERVER_URL = "http://127.0.0.1:8000/mcp"
 DEFAULT_PROTOCOL_VERSION = "2026-07-28"
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 15.0
 OutputFormat = Literal["text", "json"]
+ElicitationPolicy = Literal["interactive", "accept", "decline", "cancel"]
 
 
 class ConfigurationError(ValueError):
@@ -30,6 +31,7 @@ class ClientConfig:
     request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS
     output_format: OutputFormat = "text"
     response_cache: CacheConfig = field(default_factory=CacheConfig)
+    elicitation_policy: ElicitationPolicy | None = None
 
     def __post_init__(self) -> None:
         parsed = urlsplit(self.server_url)
@@ -41,6 +43,10 @@ class ClientConfig:
             raise ConfigurationError("MCP_REQUEST_TIMEOUT_SECONDS must be a positive number")
         if self.output_format not in {"text", "json"}:
             raise ConfigurationError("MCP_OUTPUT_FORMAT must be 'text' or 'json'")
+        if self.elicitation_policy not in {None, "interactive", "accept", "decline", "cancel"}:
+            raise ConfigurationError(
+                "MCP_ELICITATION_POLICY must be 'interactive', 'accept', 'decline', or 'cancel'"
+            )
 
     @classmethod
     def from_env(
@@ -51,6 +57,7 @@ class ClientConfig:
         protocol_version: str | None = None,
         request_timeout_seconds: float | None = None,
         output_format: str | None = None,
+        elicitation_policy: str | None = None,
     ) -> ClientConfig:
         """Load environment defaults and apply explicit CLI overrides."""
         values = os.environ if environ is None else environ
@@ -75,4 +82,8 @@ class ClientConfig:
                 else environment_timeout
             ),
             output_format=cast(OutputFormat, chosen_output),
+            elicitation_policy=cast(
+                ElicitationPolicy,
+                elicitation_policy or values.get("MCP_ELICITATION_POLICY", "interactive"),
+            ),
         )
