@@ -11,6 +11,8 @@ from urllib.parse import urlsplit
 
 from mcp.client.caching import CacheConfig
 
+from mcp_stateless_client.oauth import OAuthClientCredentials
+
 DEFAULT_SERVER_URL = "http://127.0.0.1:8000/mcp"
 DEFAULT_PROTOCOL_VERSION = "2026-07-28"
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 15.0
@@ -32,6 +34,7 @@ class ClientConfig:
     output_format: OutputFormat = "text"
     response_cache: CacheConfig = field(default_factory=CacheConfig)
     elicitation_policy: ElicitationPolicy | None = None
+    oauth: OAuthClientCredentials | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         parsed = urlsplit(self.server_url)
@@ -47,6 +50,14 @@ class ClientConfig:
             raise ConfigurationError(
                 "MCP_ELICITATION_POLICY must be 'interactive', 'accept', 'decline', or 'cancel'"
             )
+        if self.oauth is not None:
+            if parsed.scheme != "https":
+                raise ConfigurationError("OAuth credentials may only be sent to an HTTPS MCP URL")
+            issuer = urlsplit(self.oauth.issuer_url)
+            if issuer.scheme != "https" or not issuer.netloc:
+                raise ConfigurationError("MCP_OAUTH_ISSUER_URL must be an absolute HTTPS URL")
+            if not self.oauth.client_id.strip() or not self.oauth.client_secret:
+                raise ConfigurationError("OAuth client ID and secret must not be empty")
 
     @classmethod
     def from_env(
@@ -72,6 +83,23 @@ class ClientConfig:
             ) from exc
 
         chosen_output = output_format or values.get("MCP_OUTPUT_FORMAT", "text")
+        issuer_url = values.get("MCP_OAUTH_ISSUER_URL", "").strip()
+        client_id = values.get("MCP_OAUTH_CLIENT_ID", "").strip()
+        client_secret = values.get("MCP_OAUTH_CLIENT_SECRET", "")
+        oauth_values_present = bool(issuer_url or client_id or client_secret)
+        oauth_credentials: OAuthClientCredentials | None = None
+        if oauth_values_present:
+            if not issuer_url or not client_id or not client_secret:
+                raise ConfigurationError(
+                    "OAuth requires MCP_OAUTH_ISSUER_URL, MCP_OAUTH_CLIENT_ID, "
+                    "and MCP_OAUTH_CLIENT_SECRET"
+                )
+            oauth_credentials = OAuthClientCredentials(
+                issuer_url=issuer_url,
+                client_id=client_id,
+                client_secret=client_secret,
+                scope=values.get("MCP_OAUTH_SCOPE", "").strip() or None,
+            )
         return cls(
             server_url=server_url or values.get("MCP_SERVER_URL", DEFAULT_SERVER_URL),
             protocol_version=protocol_version
@@ -86,4 +114,5 @@ class ClientConfig:
                 ElicitationPolicy,
                 elicitation_policy or values.get("MCP_ELICITATION_POLICY", "interactive"),
             ),
+            oauth=oauth_credentials,
         )

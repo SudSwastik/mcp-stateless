@@ -54,7 +54,19 @@ MCP_PROTOCOL_VERSION=2026-07-28
 MCP_REQUEST_TIMEOUT_SECONDS=15
 MCP_OUTPUT_FORMAT=text
 MCP_ELICITATION_POLICY=interactive
+MCP_OAUTH_ISSUER_URL=https://identity.example
+MCP_OAUTH_CLIENT_ID=<client-id>
+MCP_OAUTH_CLIENT_SECRET=<secret-from-a-secret-store>
+MCP_OAUTH_SCOPE=notes:read
 ```
+
+OAuth client credentials are optional and are used only when all of issuer,
+client ID, and client secret are set. The SDK discovers the protected-resource
+and authorization-server metadata, pins the configured issuer before token
+exchange, and sends/refreshes bearer tokens automatically. OAuth-authenticated
+MCP endpoints must use HTTPS; secrets are never accepted as command-line
+arguments or included in the configuration representation. Tokens are held in
+memory for the duration of the current client invocation.
 
 Form elicitation is interactive by default. Set `--elicitation-policy` (or
 `MCP_ELICITATION_POLICY`) to `accept`, `decline`, or `cancel` for deterministic

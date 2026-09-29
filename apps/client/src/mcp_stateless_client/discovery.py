@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
@@ -10,6 +11,8 @@ from typing import Any, ClassVar, cast
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from httpx2 import TransportError as HttpTransportError
+from mcp.client.auth import OAuthFlowError
 from mcp_types import (
     HEADER_MISMATCH,
     SERVER_INFO_META_KEY,
@@ -19,6 +22,7 @@ from mcp_types import (
 from pydantic import ValidationError
 
 from mcp_stateless_client.config import ClientConfig
+from mcp_stateless_client.oauth import oauth_http_client
 
 CLIENT_NAME = "mcp-stateless-client"
 CLIENT_VERSION = "0.1.0"
@@ -147,6 +151,15 @@ def _post_json(
     method_header: str,
 ) -> RawHttpResponse:
     body = json.dumps(payload, separators=(",", ":")).encode()
+    if config.oauth is not None:
+        try:
+            return asyncio.run(
+                _post_json_oauth(config, body, method_header=method_header)
+            )
+        except OAuthFlowError as exc:
+            raise ProtocolError("OAuth client-credentials authorization failed") from exc
+        except (HttpTransportError, TimeoutError, OSError) as exc:
+            raise TransportError(f"Could not connect to {config.server_url}: {exc}") from exc
     request = Request(
         config.server_url,
         data=body,
@@ -176,6 +189,37 @@ def _post_json(
         status=status,
         headers=headers,
         payload=_decode_payload(response_body, config.server_url),
+    )
+
+
+async def _post_json_oauth(
+    config: ClientConfig,
+    body: bytes,
+    *,
+    method_header: str,
+) -> RawHttpResponse:
+    if config.oauth is None:
+        raise AssertionError("OAuth request requires configured client credentials")
+    async with oauth_http_client(
+        config.server_url,
+        config.oauth,
+        config.request_timeout_seconds,
+    ) as client:
+        response = await client.post(
+            config.server_url,
+            content=body,
+            headers={
+                "Accept": "application/json, text/event-stream",
+                "Connection": "close",
+                "Content-Type": "application/json",
+                "Mcp-Method": method_header,
+                "MCP-Protocol-Version": config.protocol_version,
+            },
+        )
+    return RawHttpResponse(
+        status=response.status_code,
+        headers={key.casefold(): value for key, value in response.headers.items()},
+        payload=_decode_payload(response.content, config.server_url),
     )
 
 
