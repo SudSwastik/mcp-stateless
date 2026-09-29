@@ -103,6 +103,7 @@ def _client(config: ClientConfig, prior_discover: DiscoverResult | None = None) 
             prior_discover=prior_discover,
             client_info=Implementation(name=CLIENT_NAME, version=CLIENT_VERSION),
             read_timeout_seconds=config.request_timeout_seconds,
+            cache=config.response_cache,
         )
     except ValueError as exc:
         raise ProtocolError(
@@ -277,12 +278,15 @@ async def listen(
 ) -> AsyncIterator[ServerEvent]:
     """Yield only the change events requested from a modern MCP server."""
     client = _client(config)
-    async with client, client.listen(
-        tools_list_changed=tools_list_changed,
-        prompts_list_changed=prompts_list_changed,
-        resources_list_changed=resources_list_changed,
-        resource_subscriptions=resource_subscriptions,
-    ) as subscription:
+    async with (
+        client,
+        client.listen(
+            tools_list_changed=tools_list_changed,
+            prompts_list_changed=prompts_list_changed,
+            resources_list_changed=resources_list_changed,
+            resource_subscriptions=resource_subscriptions,
+        ) as subscription,
+    ):
         async for event in subscription:
             yield event
 
