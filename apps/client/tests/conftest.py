@@ -11,9 +11,9 @@ from collections.abc import Iterator
 import pytest
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def live_server_url() -> Iterator[str]:
-    """Run the server out of process so client tests cross only the HTTP boundary."""
+    """Run an isolated server process so client tests cross only the HTTP boundary."""
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
         port = reservation.getsockname()[1]

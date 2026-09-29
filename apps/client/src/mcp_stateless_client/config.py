@@ -5,9 +5,11 @@ from __future__ import annotations
 import math
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, cast
 from urllib.parse import urlsplit
+
+from mcp.client.caching import CacheConfig
 
 DEFAULT_SERVER_URL = "http://127.0.0.1:8000/mcp"
 DEFAULT_PROTOCOL_VERSION = "2026-07-28"
@@ -27,6 +29,7 @@ class ClientConfig:
     protocol_version: str = DEFAULT_PROTOCOL_VERSION
     request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS
     output_format: OutputFormat = "text"
+    response_cache: CacheConfig = field(default_factory=CacheConfig)
 
     def __post_init__(self) -> None:
         parsed = urlsplit(self.server_url)
