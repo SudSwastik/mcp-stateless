@@ -8,6 +8,7 @@ from mcp_stateless_client.primitives import (
     get_prompt,
     read_resource,
 )
+from mcp_stateless_client.tasks import reindex_notes
 
 __all__ = [
     "ClientConfig",
@@ -16,6 +17,7 @@ __all__ = [
     "discover",
     "get_prompt",
     "read_resource",
+    "reindex_notes",
     "verify",
 ]
 __version__ = "0.1.0"

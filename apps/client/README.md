@@ -37,6 +37,8 @@ uv run mcp-stateless-client call connect_provider \
   --arguments '{"provider": "github"}' \
   --elicitation-policy accept
 
+uv run python -c 'import asyncio; from mcp_stateless_client import ClientConfig, reindex_notes; print(asyncio.run(reindex_notes(ClientConfig())))'
+
 uv run mcp-stateless-client read notes://1
 
 uv run mcp-stateless-client prompt summarize_note \
@@ -66,3 +68,6 @@ prompt pages. `verify` adds catalog and schema checks to the raw transport
 checks, probes completion twice for deterministic suggestions, and emits a
 compatibility report. `call`, `read`, and `prompt` use the pinned modern
 protocol directly without a legacy initialization handshake.
+
+The `reindex_notes` Python helper advertises the task extension, answers the
+task-time options prompt, and polls using the server's current `pollIntervalMs`.
