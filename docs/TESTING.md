@@ -31,7 +31,7 @@ uv run mypy apps
 Expected result:
 
 ```text
-19 passed
+31 passed
 All checks passed!
 Success: no issues found
 ```
@@ -94,6 +94,19 @@ For automation, append `--output json`. A successful verification confirms
 JSON-RPC request correlation, pinned-version compatibility, server identity,
 capability discovery, independent requests without `Mcp-Session-Id`, and
 rejection of mismatched routing headers.
+
+Exercise the server primitives through the standalone client:
+
+```bash
+uv run mcp-stateless-client call add \
+  --arguments '{"a": 2, "b": 3}'
+uv run mcp-stateless-client read notes://1
+uv run mcp-stateless-client prompt summarize_note \
+  --arguments '{"note_id": "1", "style": "brief"}'
+```
+
+These commands use the pinned modern version directly; they do not perform a
+legacy initialization handshake or import server code.
 
 ## Test the live Streamable HTTP server
 
