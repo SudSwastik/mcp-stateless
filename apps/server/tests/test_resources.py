@@ -23,6 +23,11 @@ async def test_lists_static_and_template_resources(server: MCPServer) -> None:
         templates = await client.list_resource_templates()
 
     assert [str(resource.uri) for resource in resources.resources] == [
+        next(
+            str(resource.uri)
+            for resource in resources.resources
+            if str(resource.uri).startswith("ui://note-dashboard/")
+        ),
         "notes://all",
         "notes://stats",
     ]

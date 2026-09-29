@@ -29,11 +29,16 @@ def test_inspects_all_advertised_catalogs(live_server_url: str) -> None:
         "connect_provider",
         "search_notes",
         "reindex_notes",
+        "note_dashboard",
     ]
-    assert [str(resource.uri) for resource in catalog.resources] == [
-        "notes://all",
-        "notes://stats",
-    ]
+    assert any(
+        str(resource.uri).startswith("ui://note-dashboard/") for resource in catalog.resources
+    )
+    assert [
+        str(resource.uri)
+        for resource in catalog.resources
+        if str(resource.uri).startswith("notes:")
+    ] == ["notes://all", "notes://stats"]
     assert [template.uri_template for template in catalog.resource_templates] == [
         "notes://{note_id}"
     ]
@@ -57,6 +62,32 @@ def test_reads_resource(live_server_url: str) -> None:
     content = result.contents[0]
     assert isinstance(content, TextResourceContents)
     assert json.loads(content.text)["title"] == "Protocol overview"
+
+
+def test_note_dashboard_has_app_metadata_and_structured_fallback(live_server_url: str) -> None:
+    config = ClientConfig(server_url=live_server_url)
+    catalog = inspect_catalog(config)
+    tool = next(tool for tool in catalog.tools if tool.name == "note_dashboard")
+    tool_meta = tool.meta
+    if tool_meta is None:
+        raise AssertionError("dashboard tool is missing metadata")
+    app_meta = tool_meta["ui"]
+    uri = app_meta["resourceUri"]
+
+    assert uri.startswith("ui://note-dashboard/")
+    assert uri.endswith(".html")
+    template = read_resource(config, uri).contents[0]
+    assert isinstance(template, TextResourceContents)
+    assert template.mime_type == "text/html;profile=mcp-app"
+    assert "Waiting for dashboard data" in template.text
+
+    result = call_tool(config, "note_dashboard", {})
+    assert result.is_error is False
+    structured = result.structured_content
+    if not isinstance(structured, dict):
+        raise AssertionError("dashboard result is missing structured content")
+    assert structured["total_notes"] == 3
+    assert len(structured["notes"]) == 3
 
 
 def test_renders_prompt(live_server_url: str) -> None:

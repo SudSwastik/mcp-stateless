@@ -19,6 +19,7 @@ async def test_lists_core_tools(server: MCPServer) -> None:
         "connect_provider",
         "search_notes",
         "reindex_notes",
+        "note_dashboard",
     ]
     assert result.ttl_ms == 30_000
     assert result.cache_scope == "public"
