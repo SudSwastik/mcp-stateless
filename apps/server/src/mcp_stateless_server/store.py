@@ -34,12 +34,16 @@ class NoteStore:
         self._lock = RLock()
         self._initial_notes = tuple(notes)
         self._notes: dict[str, Note] = {}
+        self._created_operations: dict[str, Note] = {}
+        self._deleted_operations: dict[str, Note | None] = {}
         self.reset()
 
     def reset(self) -> None:
         """Restore the initial note set."""
         with self._lock:
             self._notes = {note.note_id: note for note in self._initial_notes}
+            self._created_operations.clear()
+            self._deleted_operations.clear()
 
     def list_notes(self) -> list[Note]:
         """Return notes ordered by their stable identifiers."""
@@ -51,9 +55,13 @@ class NoteStore:
         with self._lock:
             return self._notes.get(note_id)
 
-    def create(self, title: str, body: str) -> Note:
-        """Add a note with the next numeric identifier."""
+    def create(
+        self, title: str, body: str, *, idempotency_key: str | None = None
+    ) -> tuple[Note, bool]:
+        """Add a note once per accepted MRTR operation, returning whether it changed."""
         with self._lock:
+            if idempotency_key is not None and idempotency_key in self._created_operations:
+                return self._created_operations[idempotency_key], False
             numeric_ids = [int(note_id) for note_id in self._notes if note_id.isdigit()]
             note = Note(
                 note_id=str(max(numeric_ids, default=0) + 1),
@@ -61,7 +69,21 @@ class NoteStore:
                 body=body,
             )
             self._notes[note.note_id] = note
-            return note
+            if idempotency_key is not None:
+                self._created_operations[idempotency_key] = note
+            return note, True
+
+    def delete(
+        self, note_id: str, *, idempotency_key: str | None = None
+    ) -> tuple[Note | None, bool]:
+        """Delete a note once per accepted MRTR operation."""
+        with self._lock:
+            if idempotency_key is not None and idempotency_key in self._deleted_operations:
+                return self._deleted_operations[idempotency_key], False
+            note = self._notes.pop(note_id, None)
+            if idempotency_key is not None:
+                self._deleted_operations[idempotency_key] = note
+            return note, note is not None
 
     def search(self, query: str, limit: int = 10) -> list[Note]:
         """Search note titles and bodies case-insensitively."""

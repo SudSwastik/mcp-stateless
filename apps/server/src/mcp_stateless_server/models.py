@@ -1,5 +1,7 @@
 """Typed domain and tool-result models."""
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -34,3 +36,10 @@ class NoteStats(BaseModel):
 
     total_notes: int
     total_words: int
+
+
+class NoteMutationResult(BaseModel):
+    """Outcome of an elicited note create or delete operation."""
+
+    action: Literal["created", "deleted", "declined", "cancelled", "not_found"]
+    note: Note | None = None
