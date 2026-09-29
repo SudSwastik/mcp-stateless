@@ -1,0 +1,36 @@
+[project]
+name = "mcp-stateless"
+version = "0.1.0"
+description = "MCP 2026-07-28 client and server monorepo"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "mypy>=1.18.2",
+    "pytest>=8.4.2",
+    "ruff>=0.13.2",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["apps/server"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["apps/server/tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["mcp_stateless_server"]
+mypy_path = ["apps/server/src"]
