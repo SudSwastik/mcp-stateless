@@ -33,6 +33,10 @@ uv run mcp-stateless-client call delete_note \
   --arguments '{"note_id": "2"}' \
   --elicitation-policy accept
 
+uv run mcp-stateless-client call connect_provider \
+  --arguments '{"provider": "github"}' \
+  --elicitation-policy accept
+
 uv run mcp-stateless-client read notes://1
 
 uv run mcp-stateless-client prompt summarize_note \
@@ -54,7 +58,8 @@ Form elicitation is interactive by default. Set `--elicitation-policy` (or
 `MCP_ELICITATION_POLICY`) to `accept`, `decline`, or `cancel` for deterministic
 non-interactive runs. `accept` supplies schema-valid example values; for
 example, it uses `Elicited title` for a missing note title and confirms
-deletion.
+deletion. For URL-mode authorization, interactive mode displays the URL for
+user approval; deterministic policies accept, decline, or cancel navigation.
 
 `inspect` traverses all advertised tool, resource, resource-template, and
 prompt pages. `verify` adds catalog and schema checks to the raw transport

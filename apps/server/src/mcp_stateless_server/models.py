@@ -51,3 +51,10 @@ class PublishNoteResult(BaseModel):
     action: Literal["published", "declined", "cancelled", "not_found"]
     note_id: str
     audience: Literal["team", "public"] | None = None
+
+
+class ConnectProviderResult(BaseModel):
+    """Outcome of out-of-band provider authorization."""
+
+    action: Literal["connected", "declined", "cancelled"]
+    provider: Literal["github", "google"]

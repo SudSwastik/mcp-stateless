@@ -41,6 +41,7 @@ class NoteStore:
         self._published_operations: dict[
             str, tuple[str, Literal["team", "public"]]
         ] = {}
+        self._connected_providers: set[str] = set()
         self.reset()
 
     def reset(self) -> None:
@@ -51,6 +52,7 @@ class NoteStore:
             self._deleted_operations.clear()
             self._publications.clear()
             self._published_operations.clear()
+            self._connected_providers.clear()
 
     def list_notes(self) -> list[Note]:
         """Return notes ordered by their stable identifiers."""
@@ -114,6 +116,16 @@ class NoteStore:
         """Return the audience for a published note, if any."""
         with self._lock:
             return self._publications.get(note_id)
+
+    def connect_provider(self, provider: Literal["github", "google"]) -> None:
+        """Record a completed demo authorization without storing credentials."""
+        with self._lock:
+            self._connected_providers.add(provider)
+
+    def is_provider_connected(self, provider: Literal["github", "google"]) -> bool:
+        """Return whether a provider's demo authorization has completed."""
+        with self._lock:
+            return provider in self._connected_providers
 
     def search(self, query: str, limit: int = 10) -> list[Note]:
         """Search note titles and bodies case-insensitively."""

@@ -11,6 +11,7 @@ from mcp_types import (
     INVALID_REQUEST,
     ElicitRequestFormParams,
     ElicitRequestParams,
+    ElicitRequestURLParams,
     ElicitResult,
     ErrorData,
 )
@@ -19,12 +20,29 @@ from mcp_stateless_client.config import ElicitationPolicy
 
 
 def make_elicitation_callback(policy: ElicitationPolicy) -> ElicitationFnT:
-    """Build a callback that handles form requests without exposing them to tool output."""
+    """Build a callback for form and URL requests without exposing secrets to tool output."""
 
     async def respond(
         _context: ClientRequestContext,
         params: ElicitRequestParams,
     ) -> ElicitResult | ErrorData:
+        if isinstance(params, ElicitRequestURLParams):
+            if policy == "decline":
+                return ElicitResult(action="decline")
+            if policy == "cancel":
+                return ElicitResult(action="cancel")
+            if policy == "interactive":
+                print(params.message, file=sys.stderr)
+                print(f"Authorization URL: {params.url}", file=sys.stderr)
+                print("Continue to this URL? [y/N]", file=sys.stderr)
+                try:
+                    answer = input("> ").strip().casefold()
+                except EOFError:
+                    return ElicitResult(action="cancel")
+                return ElicitResult(
+                    action="accept" if answer in {"y", "yes"} else "decline"
+                )
+            return ElicitResult(action="accept")
         if not isinstance(params, ElicitRequestFormParams):
             return ErrorData(
                 code=INVALID_REQUEST,

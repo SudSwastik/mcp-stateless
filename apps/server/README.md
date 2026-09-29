@@ -24,6 +24,8 @@ The server also exposes:
 - completion for `summarize_note` note IDs and styles;
 - completion for the `notes://{note_id}` resource template;
 - the derived JSON resource `notes://stats`.
+- `connect_provider` demonstrates URL-mode out-of-band authorization. Its demo
+  endpoint receives no credentials or authorization codes through MCP.
 
 ## Test
 
