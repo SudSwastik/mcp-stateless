@@ -21,7 +21,7 @@ from mcp_types import PromptReference, ResourceTemplateReference, TextContent, T
 def test_inspects_all_advertised_catalogs(live_server_url: str) -> None:
     catalog = inspect_catalog(ClientConfig(server_url=live_server_url))
 
-    assert [tool.name for tool in catalog.tools] == ["add", "search_notes"]
+    assert [tool.name for tool in catalog.tools] == ["add", "create_note", "search_notes"]
     assert [str(resource.uri) for resource in catalog.resources] == [
         "notes://all",
         "notes://stats",

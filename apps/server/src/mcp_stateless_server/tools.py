@@ -4,21 +4,32 @@ from typing import Annotated
 
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.subscriptions import SubscriptionBus
+from mcp.shared.subscriptions import ResourcesListChanged, ResourceUpdated
 from mcp_types import CallToolResult, ResourceLink, TextContent
 from pydantic import Field
 
-from mcp_stateless_server.models import AddResult, SearchNotesResult
+from mcp_stateless_server.models import AddResult, Note, SearchNotesResult
 from mcp_stateless_server.pagination import CursorError
 from mcp_stateless_server.store import NoteStore
 
 
-def register_tools(mcp: MCPServer, store: NoteStore) -> None:
+def register_tools(mcp: MCPServer, store: NoteStore, event_bus: SubscriptionBus) -> None:
     """Register deterministic tools on the supplied server."""
 
     @mcp.tool()
     def add(a: int, b: int) -> AddResult:
         """Add two integers."""
         return AddResult(result=a + b)
+
+    @mcp.tool()
+    async def create_note(title: str, body: str) -> Note:
+        """Create a note and notify listeners that note resources changed."""
+        note = store.create(title, body)
+        await event_bus.publish(ResourcesListChanged())
+        for uri in ("notes://all", "notes://stats", f"notes://{note.note_id}"):
+            await event_bus.publish(ResourceUpdated(uri=uri))
+        return note
 
     @mcp.tool()
     def search_notes(

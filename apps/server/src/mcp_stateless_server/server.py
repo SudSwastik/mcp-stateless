@@ -4,7 +4,7 @@ from typing import cast
 
 from mcp.server import MCPServer
 from mcp.server.caching import CacheHint
-from mcp.server.subscriptions import SubscriptionBus
+from mcp.server.subscriptions import InMemorySubscriptionBus, SubscriptionBus
 from mcp_types.methods import CACHEABLE_METHODS, CacheableMethod
 
 from mcp_stateless_server.completions import register_completions
@@ -21,6 +21,7 @@ def create_server(
 ) -> MCPServer:
     """Build an isolated MCP server instance."""
     note_store = store or NoteStore()
+    event_bus = subscriptions if subscriptions is not None else InMemorySubscriptionBus()
     server = MCPServer(
         "mcp-stateless-server",
         version="0.1.0",
@@ -28,9 +29,9 @@ def create_server(
             cast(CacheableMethod, method): CacheHint(ttl_ms=30_000, scope="public")
             for method in CACHEABLE_METHODS
         },
-        subscriptions=subscriptions,
+        subscriptions=event_bus,
     )
-    register_tools(server, note_store)
+    register_tools(server, note_store, event_bus)
     register_resources(server, note_store)
     register_prompts(server, note_store)
     register_completions(server, note_store)
