@@ -122,6 +122,9 @@ class CloseRedisBusOnShutdown:
         self._bus = bus
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope.get("type") == "http":
+            await self._bus.start()
+
         async def close_on_shutdown(message: Message) -> None:
             if message.get("type") == "lifespan.startup.complete":
                 await self._bus.start()
