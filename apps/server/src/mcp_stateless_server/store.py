@@ -3,6 +3,7 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 from threading import RLock
+from typing import Literal
 
 from mcp_stateless_server.models import Note
 from mcp_stateless_server.pagination import (
@@ -36,6 +37,10 @@ class NoteStore:
         self._notes: dict[str, Note] = {}
         self._created_operations: dict[str, Note] = {}
         self._deleted_operations: dict[str, Note | None] = {}
+        self._publications: dict[str, Literal["team", "public"]] = {}
+        self._published_operations: dict[
+            str, tuple[str, Literal["team", "public"]]
+        ] = {}
         self.reset()
 
     def reset(self) -> None:
@@ -44,6 +49,8 @@ class NoteStore:
             self._notes = {note.note_id: note for note in self._initial_notes}
             self._created_operations.clear()
             self._deleted_operations.clear()
+            self._publications.clear()
+            self._published_operations.clear()
 
     def list_notes(self) -> list[Note]:
         """Return notes ordered by their stable identifiers."""
@@ -84,6 +91,29 @@ class NoteStore:
             if idempotency_key is not None:
                 self._deleted_operations[idempotency_key] = note
             return note, note is not None
+
+    def publish(
+        self,
+        note_id: str,
+        audience: Literal["team", "public"],
+        *,
+        idempotency_key: str | None = None,
+    ) -> tuple[Literal["team", "public"] | None, bool]:
+        """Publish a note once per accepted MRTR operation."""
+        with self._lock:
+            if idempotency_key is not None and idempotency_key in self._published_operations:
+                return self._published_operations[idempotency_key][1], False
+            if note_id not in self._notes:
+                return None, False
+            self._publications[note_id] = audience
+            if idempotency_key is not None:
+                self._published_operations[idempotency_key] = (note_id, audience)
+            return audience, True
+
+    def publication_for(self, note_id: str) -> Literal["team", "public"] | None:
+        """Return the audience for a published note, if any."""
+        with self._lock:
+            return self._publications.get(note_id)
 
     def search(self, query: str, limit: int = 10) -> list[Note]:
         """Search note titles and bodies case-insensitively."""
