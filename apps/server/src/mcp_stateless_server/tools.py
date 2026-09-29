@@ -1,6 +1,7 @@
 """Core tool registrations."""
 
 import hashlib
+import json
 from typing import Annotated, Literal
 
 from mcp.server import MCPServer
@@ -14,11 +15,20 @@ from mcp.server.mcpserver import (
     Resolve,
 )
 from mcp.server.mcpserver.exceptions import ToolError
-from mcp_types import CallToolResult, ResourceLink, TextContent
+from mcp_types import (
+    CallToolResult,
+    ElicitRequest,
+    ElicitRequestURLParams,
+    ElicitResult,
+    InputRequiredResult,
+    ResourceLink,
+    TextContent,
+)
 from pydantic import BaseModel, Field
 
 from mcp_stateless_server.models import (
     AddResult,
+    ConnectProviderResult,
     NoteMutationResult,
     PublishNoteResult,
     SearchNotesResult,
@@ -184,6 +194,48 @@ def register_tools(mcp: MCPServer, store: NoteStore) -> None:
         return PublishNoteResult(
             action="published", note_id=note_id, audience=published_audience
         )
+
+    @mcp.tool()
+    async def connect_provider(
+        provider: Literal["github", "google"],
+        ctx: Context,
+    ) -> ConnectProviderResult | InputRequiredResult:
+        """Connect a provider using URL-mode out-of-band authorization."""
+        response_key = "mcp_stateless_server.tools:connect_provider:authorization"
+        request = ElicitRequest(
+            params=ElicitRequestURLParams(
+                message=f"Continue to {provider.title()} to authorize this demo connection.",
+                url=f"https://auth.example.test/{provider}/authorize",
+            )
+        )
+        if ctx.request_state is None:
+            return InputRequiredResult(
+                input_requests={response_key: request},
+                request_state=json.dumps({"provider": provider}, separators=(",", ":")),
+            )
+
+        try:
+            state = json.loads(ctx.request_state)
+        except json.JSONDecodeError as exc:
+            raise ToolError("Invalid provider authorization request state.") from exc
+        if state != {"provider": provider}:
+            raise ToolError("Provider authorization request state does not match this call.")
+
+        responses = ctx.input_responses or {}
+        result = responses.get(response_key)
+        if not isinstance(result, ElicitResult):
+            return InputRequiredResult(
+                input_requests={response_key: request}, request_state=ctx.request_state
+            )
+        if result.action == "decline":
+            return ConnectProviderResult(action="declined", provider=provider)
+        if result.action == "cancel":
+            return ConnectProviderResult(action="cancelled", provider=provider)
+
+        # This deterministic demo treats navigation consent as successful external
+        # completion. No authorization code or provider credential enters MCP.
+        store.connect_provider(provider)
+        return ConnectProviderResult(action="connected", provider=provider)
 
     @mcp.tool()
     def search_notes(

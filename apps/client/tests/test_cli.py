@@ -140,6 +140,32 @@ def test_call_command_accepts_delete_confirmation_over_http(
     assert payload["structuredContent"]["action"] == "deleted"
 
 
+def test_call_command_accepts_url_mode_provider_authorization(
+    live_server_url: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(
+        [
+            "call",
+            "connect_provider",
+            "--arguments",
+            '{"provider": "github"}',
+            "--url",
+            live_server_url,
+            "--elicitation-policy",
+            "accept",
+            "--output",
+            "json",
+        ]
+    )
+
+    assert exit_code == 0
+    outcome = json.loads(capsys.readouterr().out)["structuredContent"]
+    assert outcome == {"action": "connected", "provider": "github"}
+    assert "code" not in outcome
+    assert "token" not in outcome
+
+
 def test_read_and_prompt_commands_render_text(
     live_server_url: str, capsys: pytest.CaptureFixture[str]
 ) -> None:

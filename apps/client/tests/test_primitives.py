@@ -26,6 +26,7 @@ def test_inspects_all_advertised_catalogs(live_server_url: str) -> None:
         "create_note",
         "delete_note",
         "publish_note",
+        "connect_provider",
         "search_notes",
     ]
     assert [str(resource.uri) for resource in catalog.resources] == [
