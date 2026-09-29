@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import sys
 from collections.abc import Sequence
@@ -25,6 +26,7 @@ from mcp_stateless_client.primitives import (
     compatibility_report,
     get_prompt,
     inspect_catalog,
+    listen,
     read_resource,
 )
 
@@ -63,6 +65,17 @@ def _parser() -> argparse.ArgumentParser:
         "--arguments", default="{}", help="JSON object of string prompt arguments"
     )
     _add_connection_options(prompt_parser)
+
+    listen_parser = subparsers.add_parser("listen", help="stream requested change events")
+    listen_parser.add_argument("--tools", action="store_true", help="request tool-list changes")
+    listen_parser.add_argument("--prompts", action="store_true", help="request prompt-list changes")
+    listen_parser.add_argument(
+        "--resources", action="store_true", help="request resource-list changes"
+    )
+    listen_parser.add_argument(
+        "--resource", action="append", default=[], help="subscribe to a resource URI (repeatable)"
+    )
+    _add_connection_options(listen_parser)
     return parser
 
 
@@ -111,13 +124,8 @@ def _print_inspection(catalog: PrimitiveCatalog, config: ClientConfig) -> None:
         + (f"{identity.name} {identity.version}" if identity is not None else "not provided")
     )
     print(f"Capabilities: {', '.join(sorted(capabilities)) or 'none'}")
-    print(
-        f"Cache: {observation.result.cache_scope}, ttl={observation.result.ttl_ms}ms"
-    )
-    print(
-        "Session header: "
-        + (observation.headers.get("mcp-session-id") or "absent (stateless)")
-    )
+    print(f"Cache: {observation.result.cache_scope}, ttl={observation.result.ttl_ms}ms")
+    print("Session header: " + (observation.headers.get("mcp-session-id") or "absent (stateless)"))
     tool_names = ", ".join(tool.name for tool in catalog.tools) or "none"
     print(f"Tools ({len(catalog.tools)}): {tool_names}")
     print(
@@ -126,10 +134,7 @@ def _print_inspection(catalog: PrimitiveCatalog, config: ClientConfig) -> None:
     )
     print(
         f"Resource templates ({len(catalog.resource_templates)}): "
-        + (
-            ", ".join(template.uri_template for template in catalog.resource_templates)
-            or "none"
-        )
+        + (", ".join(template.uri_template for template in catalog.resource_templates) or "none")
     )
     print(
         f"Prompts ({len(catalog.prompts)}): "
@@ -206,6 +211,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                 _print_json(_dump_model(resource_result))
             else:
                 _print_resource_result(resource_result)
+            return 0
+
+        if args.command == "listen":
+
+            async def stream_events() -> None:
+                async for event in listen(
+                    config,
+                    tools_list_changed=args.tools,
+                    prompts_list_changed=args.prompts,
+                    resources_list_changed=args.resources,
+                    resource_subscriptions=args.resource,
+                ):
+                    _print_json(_dump_model(event))
+
+            asyncio.run(stream_events())
             return 0
 
         prompt_arguments = _parse_arguments(args.arguments, strings_only=True)

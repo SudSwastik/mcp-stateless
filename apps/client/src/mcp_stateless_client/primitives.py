@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Coroutine, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from httpx2 import TransportError as HttpTransportError
 from mcp import Client
 from mcp.shared.exceptions import MCPError
+from mcp.shared.subscriptions import ServerEvent
 from mcp_types import (
     CallToolResult,
     CompleteResult,
@@ -62,9 +63,7 @@ class PrimitiveCatalog:
             "discovery": self.discovery.to_dict(),
             "tools": [_model_dict(tool) for tool in self.tools],
             "resources": [_model_dict(resource) for resource in self.resources],
-            "resourceTemplates": [
-                _model_dict(template) for template in self.resource_templates
-            ],
+            "resourceTemplates": [_model_dict(template) for template in self.resource_templates],
             "prompts": [_model_dict(prompt) for prompt in self.prompts],
         }
 
@@ -104,7 +103,6 @@ def _client(config: ClientConfig, prior_discover: DiscoverResult | None = None) 
             prior_discover=prior_discover,
             client_info=Implementation(name=CLIENT_NAME, version=CLIENT_VERSION),
             read_timeout_seconds=config.request_timeout_seconds,
-            cache=None,
         )
     except ValueError as exc:
         raise ProtocolError(
@@ -116,9 +114,7 @@ def _model_dict(model: BaseModel) -> dict[str, Any]:
     return model.model_dump(by_alias=True, mode="json", exclude_none=True)
 
 
-def _first_nested[T: BaseException](
-    error: BaseException, error_type: type[T]
-) -> T | None:
+def _first_nested[T: BaseException](error: BaseException, error_type: type[T]) -> T | None:
     if isinstance(error, error_type):
         return error
     if isinstance(error, BaseExceptionGroup):
@@ -134,9 +130,7 @@ def _run[T](operation: Coroutine[Any, Any, T]) -> T:
     except ClientError:
         raise
     except MCPError as exc:
-        raise ProtocolError(
-            f"MCP protocol error {exc.code}: {exc.error.message}"
-        ) from exc
+        raise ProtocolError(f"MCP protocol error {exc.code}: {exc.error.message}") from exc
     except ValidationError as exc:
         raise ProtocolError(f"Server response failed MCP schema validation: {exc}") from exc
     except (HttpTransportError, TimeoutError, OSError) as exc:
@@ -197,22 +191,14 @@ async def _catalog(config: ClientConfig, discovery: DiscoveryObservation) -> Pri
             result = await client.list_prompts(cursor=cursor)
             return result.prompts, result.next_cursor
 
-        tools = (
-            await _collect_pages(tools_page)
-            if capabilities.tools is not None
-            else ()
-        )
+        tools = await _collect_pages(tools_page) if capabilities.tools is not None else ()
         if capabilities.resources is not None:
             resources = await _collect_pages(resources_page)
             templates = await _collect_pages(templates_page)
         else:
             resources = ()
             templates = ()
-        prompts = (
-            await _collect_pages(prompts_page)
-            if capabilities.prompts is not None
-            else ()
-        )
+        prompts = await _collect_pages(prompts_page) if capabilities.prompts is not None else ()
 
     return PrimitiveCatalog(
         discovery=discovery,
@@ -229,9 +215,7 @@ def inspect_catalog(config: ClientConfig) -> PrimitiveCatalog:
     return _run(_catalog(config, observation))
 
 
-async def _call_tool(
-    config: ClientConfig, name: str, arguments: dict[str, Any]
-) -> CallToolResult:
+async def _call_tool(config: ClientConfig, name: str, arguments: dict[str, Any]) -> CallToolResult:
     async with _client(config) as client:
         return await client.call_tool(name, arguments)
 
@@ -258,9 +242,7 @@ async def _get_prompt(
         return await client.get_prompt(name, arguments)
 
 
-def get_prompt(
-    config: ClientConfig, name: str, arguments: dict[str, str]
-) -> GetPromptResult:
+def get_prompt(config: ClientConfig, name: str, arguments: dict[str, str]) -> GetPromptResult:
     """Render a prompt directly using the pinned stateless protocol version."""
     return _run(_get_prompt(config, name, arguments))
 
@@ -285,9 +267,27 @@ def complete_argument(
     return _run(_complete_argument(config, ref, argument_name, value))
 
 
-def _completion_check(
-    config: ClientConfig, catalog: PrimitiveCatalog
-) -> VerificationCheck:
+async def listen(
+    config: ClientConfig,
+    *,
+    tools_list_changed: bool = False,
+    prompts_list_changed: bool = False,
+    resources_list_changed: bool = False,
+    resource_subscriptions: Sequence[str] = (),
+) -> AsyncIterator[ServerEvent]:
+    """Yield only the change events requested from a modern MCP server."""
+    client = _client(config)
+    async with client, client.listen(
+        tools_list_changed=tools_list_changed,
+        prompts_list_changed=prompts_list_changed,
+        resources_list_changed=resources_list_changed,
+        resource_subscriptions=resource_subscriptions,
+    ) as subscription:
+        async for event in subscription:
+            yield event
+
+
+def _completion_check(config: ClientConfig, catalog: PrimitiveCatalog) -> VerificationCheck:
     if catalog.discovery.result.capabilities.completions is None:
         return VerificationCheck(
             name="completion",
@@ -317,8 +317,7 @@ def _completion_check(
         name="completion",
         passed=stable,
         detail=(
-            f"stable suggestions for {prompt_name}.{argument_name}: "
-            f"{first.completion.values!r}"
+            f"stable suggestions for {prompt_name}.{argument_name}: {first.completion.values!r}"
             if stable
             else f"unstable suggestions for {prompt_name}.{argument_name}"
         ),
