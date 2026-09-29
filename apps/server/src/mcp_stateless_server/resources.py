@@ -5,6 +5,7 @@ import json
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ResourceError
 
+from mcp_stateless_server.models import NoteStats
 from mcp_stateless_server.store import NoteStore
 
 
@@ -19,6 +20,19 @@ def register_resources(mcp: MCPServer, store: NoteStore) -> None:
     )
     def all_notes() -> str:
         return json.dumps([note.model_dump() for note in store.list_notes()], sort_keys=True)
+
+    @mcp.resource(
+        "notes://stats",
+        name="note-stats",
+        description="Derived statistics for the note collection.",
+        mime_type="application/json",
+    )
+    def note_stats() -> NoteStats:
+        notes = store.list_notes()
+        return NoteStats(
+            total_notes=len(notes),
+            total_words=sum(len(note.body.split()) for note in notes),
+        )
 
     @mcp.resource(
         "notes://{note_id}",

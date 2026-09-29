@@ -12,13 +12,16 @@ from mcp import Client
 from mcp.shared.exceptions import MCPError
 from mcp_types import (
     CallToolResult,
+    CompleteResult,
     DiscoverResult,
     GetPromptResult,
     Implementation,
     Prompt,
+    PromptReference,
     ReadResourceResult,
     Resource,
     ResourceTemplate,
+    ResourceTemplateReference,
     Tool,
 )
 from pydantic import BaseModel, ValidationError
@@ -262,7 +265,69 @@ def get_prompt(
     return _run(_get_prompt(config, name, arguments))
 
 
-def _primitive_checks(catalog: PrimitiveCatalog) -> tuple[VerificationCheck, ...]:
+async def _complete_argument(
+    config: ClientConfig,
+    ref: PromptReference | ResourceTemplateReference,
+    argument_name: str,
+    value: str,
+) -> CompleteResult:
+    async with _client(config) as client:
+        return await client.complete(ref, {"name": argument_name, "value": value})
+
+
+def complete_argument(
+    config: ClientConfig,
+    ref: PromptReference | ResourceTemplateReference,
+    argument_name: str,
+    value: str = "",
+) -> CompleteResult:
+    """Request deterministic completion for a prompt or resource argument."""
+    return _run(_complete_argument(config, ref, argument_name, value))
+
+
+def _completion_check(
+    config: ClientConfig, catalog: PrimitiveCatalog
+) -> VerificationCheck:
+    if catalog.discovery.result.capabilities.completions is None:
+        return VerificationCheck(
+            name="completion",
+            passed=True,
+            detail="server does not advertise completion",
+        )
+    target = next(
+        (
+            (prompt.name, argument.name)
+            for prompt in catalog.prompts
+            for argument in (prompt.arguments or ())
+        ),
+        None,
+    )
+    if target is None:
+        return VerificationCheck(
+            name="completion",
+            passed=False,
+            detail="completion is advertised but no prompt argument can be probed",
+        )
+    prompt_name, argument_name = target
+    ref = PromptReference(name=prompt_name)
+    first = complete_argument(config, ref, argument_name)
+    second = complete_argument(config, ref, argument_name)
+    stable = first.completion.values == second.completion.values
+    return VerificationCheck(
+        name="completion",
+        passed=stable,
+        detail=(
+            f"stable suggestions for {prompt_name}.{argument_name}: "
+            f"{first.completion.values!r}"
+            if stable
+            else f"unstable suggestions for {prompt_name}.{argument_name}"
+        ),
+    )
+
+
+def _primitive_checks(
+    config: ClientConfig, catalog: PrimitiveCatalog
+) -> tuple[VerificationCheck, ...]:
     capabilities = catalog.discovery.result.capabilities
     invalid_tool_schemas = [
         tool.name for tool in catalog.tools if tool.input_schema.get("type") != "object"
@@ -298,6 +363,7 @@ def _primitive_checks(catalog: PrimitiveCatalog) -> tuple[VerificationCheck, ...
             passed=capabilities.prompts is None or bool(catalog.prompts),
             detail=f"listed {len(catalog.prompts)} prompts",
         ),
+        _completion_check(config, catalog),
     )
 
 
@@ -308,5 +374,5 @@ def compatibility_report(config: ClientConfig) -> CompatibilityReport:
     return CompatibilityReport(
         transport=transport,
         catalog=catalog,
-        primitive_checks=_primitive_checks(catalog),
+        primitive_checks=_primitive_checks(config, catalog),
     )
