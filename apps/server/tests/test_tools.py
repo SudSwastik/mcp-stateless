@@ -11,9 +11,24 @@ async def test_lists_core_tools(server: MCPServer) -> None:
     async with Client(server) as client:
         result = await client.list_tools()
 
-    assert [tool.name for tool in result.tools] == ["add", "search_notes"]
+    assert [tool.name for tool in result.tools] == ["add", "create_note", "search_notes"]
     assert result.ttl_ms == 30_000
     assert result.cache_scope == "public"
+
+
+@pytest.mark.anyio
+async def test_create_note_returns_new_note(server: MCPServer) -> None:
+    async with Client(server) as client:
+        result = await client.call_tool(
+            "create_note", {"title": "Subscriptions", "body": "Changes are observable."}
+        )
+
+    assert result.is_error is False
+    assert result.structured_content == {
+        "note_id": "4",
+        "title": "Subscriptions",
+        "body": "Changes are observable.",
+    }
 
 
 @pytest.mark.anyio

@@ -51,6 +51,18 @@ class NoteStore:
         with self._lock:
             return self._notes.get(note_id)
 
+    def create(self, title: str, body: str) -> Note:
+        """Add a note with the next numeric identifier."""
+        with self._lock:
+            numeric_ids = [int(note_id) for note_id in self._notes if note_id.isdigit()]
+            note = Note(
+                note_id=str(max(numeric_ids, default=0) + 1),
+                title=title,
+                body=body,
+            )
+            self._notes[note.note_id] = note
+            return note
+
     def search(self, query: str, limit: int = 10) -> list[Note]:
         """Search note titles and bodies case-insensitively."""
         return self._matching_notes(query)[:limit]
@@ -75,9 +87,7 @@ class NoteStore:
     ) -> NoteSearchPage:
         """Return a stateless page bound to the query, limit, and result snapshot."""
         matches = self._matching_notes(query)
-        snapshot = snapshot_fingerprint(
-            [note.model_dump_json() for note in matches]
-        )
+        snapshot = snapshot_fingerprint([note.model_dump_json() for note in matches])
         offset = (
             decode_cursor(
                 cursor,
