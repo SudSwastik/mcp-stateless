@@ -25,3 +25,12 @@ class SearchNotesResult(BaseModel):
     query: str
     notes: list[Note]
     count: int
+    total: int
+    next_cursor: str | None = None
+
+
+class NoteStats(BaseModel):
+    """Derived statistics for the note collection."""
+
+    total_notes: int
+    total_words: int

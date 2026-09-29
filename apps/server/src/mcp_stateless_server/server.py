@@ -2,6 +2,7 @@
 
 from mcp.server import MCPServer
 
+from mcp_stateless_server.completions import register_completions
 from mcp_stateless_server.prompts import register_prompts
 from mcp_stateless_server.resources import register_resources
 from mcp_stateless_server.store import NoteStore
@@ -15,6 +16,7 @@ def create_server(store: NoteStore | None = None) -> MCPServer:
     register_tools(server, note_store)
     register_resources(server, note_store)
     register_prompts(server, note_store)
+    register_completions(server, note_store)
     return server
 
 

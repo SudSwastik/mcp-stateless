@@ -3,7 +3,7 @@
 import pytest
 from mcp import Client
 from mcp.server import MCPServer
-from mcp.types import TextContent
+from mcp.types import EmbeddedResource, TextContent, TextResourceContents
 
 
 @pytest.mark.anyio
@@ -22,8 +22,13 @@ async def test_renders_summary_prompt(server: MCPServer) -> None:
             {"note_id": "1", "style": "brief"},
         )
 
-    assert len(result.messages) == 1
-    content = result.messages[0].content
-    assert isinstance(content, TextContent)
-    assert "Summarize the following note in one sentence." in content.text
-    assert "Title: Protocol overview" in content.text
+    assert len(result.messages) == 2
+    instruction = result.messages[0].content
+    embedded = result.messages[1].content
+    assert isinstance(instruction, TextContent)
+    assert "one sentence" in instruction.text
+    assert "Protocol overview" in instruction.text
+    assert isinstance(embedded, EmbeddedResource)
+    assert isinstance(embedded.resource, TextResourceContents)
+    assert embedded.resource.uri == "notes://1"
+    assert "MCP requests use JSON-RPC." in embedded.resource.text

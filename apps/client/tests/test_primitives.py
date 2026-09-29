@@ -10,18 +10,22 @@ from mcp_stateless_client.primitives import (
     _collect_pages,
     call_tool,
     compatibility_report,
+    complete_argument,
     get_prompt,
     inspect_catalog,
     read_resource,
 )
-from mcp_types import TextContent, TextResourceContents
+from mcp_types import PromptReference, ResourceTemplateReference, TextContent, TextResourceContents
 
 
 def test_inspects_all_advertised_catalogs(live_server_url: str) -> None:
     catalog = inspect_catalog(ClientConfig(server_url=live_server_url))
 
     assert [tool.name for tool in catalog.tools] == ["add", "search_notes"]
-    assert [str(resource.uri) for resource in catalog.resources] == ["notes://all"]
+    assert [str(resource.uri) for resource in catalog.resources] == [
+        "notes://all",
+        "notes://stats",
+    ]
     assert [template.uri_template for template in catalog.resource_templates] == [
         "notes://{note_id}"
     ]
@@ -71,11 +75,31 @@ def test_builds_primitive_compatibility_report(live_server_url: str) -> None:
 
     assert report.passed is True
     assert {check.name for check in report.primitive_checks} == {
+        "completion",
         "prompt_catalog",
         "resource_catalog",
         "tool_catalog",
         "tool_schemas",
     }
+
+
+def test_requests_stable_prompt_and_resource_completions(live_server_url: str) -> None:
+    config = ClientConfig(server_url=live_server_url)
+
+    styles = complete_argument(
+        config,
+        PromptReference(name="summarize_note"),
+        "style",
+        "d",
+    )
+    note_ids = complete_argument(
+        config,
+        ResourceTemplateReference(uri="notes://{note_id}"),
+        "note_id",
+    )
+
+    assert styles.completion.values == ["detailed"]
+    assert note_ids.completion.values == ["1", "2", "3"]
 
 
 def test_rejects_repeated_pagination_cursor() -> None:

@@ -31,7 +31,7 @@ uv run mypy apps
 Expected result:
 
 ```text
-31 passed
+44 passed
 All checks passed!
 Success: no issues found
 ```
@@ -93,7 +93,9 @@ uv run mcp-stateless-client verify \
 For automation, append `--output json`. A successful verification confirms
 JSON-RPC request correlation, pinned-version compatibility, server identity,
 capability discovery, independent requests without `Mcp-Session-Id`, and
-rejection of mismatched routing headers.
+rejection of mismatched routing headers. It also traverses primitive catalogs,
+validates tool schemas, and checks that repeated completion requests return
+stable suggestions.
 
 Exercise the server primitives through the standalone client:
 
@@ -174,9 +176,12 @@ Verify these operations:
 | --- | --- | --- |
 | Tool | `add` with `a=2`, `b=3` | Structured result `{"result": 5}` |
 | Tool | `search_notes` with `query="MRTR"` | Note `3`, titled `Elicitation` |
+| Tool pagination | `search_notes` with empty query and `limit=2` | Two notes plus opaque `next_cursor`; retry returns note `3` |
 | Resource | Read `notes://all` | Three notes in ID order |
+| Resource | Read `notes://stats` | `total_notes=3` and `total_words=16` |
 | Resource template | Read `notes://1` | `Protocol overview` note |
 | Prompt | `summarize_note`, note `1`, style `brief` | A one-sentence summary instruction |
+| Completion | Prompt `note_id` with an empty prefix | Stable suggestions `1`, `2`, and `3` |
 
 ## Test the container image
 

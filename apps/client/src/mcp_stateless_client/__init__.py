@@ -2,11 +2,17 @@
 
 from mcp_stateless_client.config import ClientConfig
 from mcp_stateless_client.discovery import discover, verify
-from mcp_stateless_client.primitives import call_tool, get_prompt, read_resource
+from mcp_stateless_client.primitives import (
+    call_tool,
+    complete_argument,
+    get_prompt,
+    read_resource,
+)
 
 __all__ = [
     "ClientConfig",
     "call_tool",
+    "complete_argument",
     "discover",
     "get_prompt",
     "read_resource",

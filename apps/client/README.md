@@ -44,5 +44,6 @@ MCP_OUTPUT_FORMAT=text
 
 `inspect` traverses all advertised tool, resource, resource-template, and
 prompt pages. `verify` adds catalog and schema checks to the raw transport
-checks and emits a compatibility report. `call`, `read`, and `prompt` use the
-pinned modern protocol directly without a legacy initialization handshake.
+checks, probes completion twice for deterministic suggestions, and emits a
+compatibility report. `call`, `read`, and `prompt` use the pinned modern
+protocol directly without a legacy initialization handshake.
