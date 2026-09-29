@@ -10,6 +10,7 @@ from typing import Any
 from httpx2 import TransportError as HttpTransportError
 from mcp import Client
 from mcp.client import advertise
+from mcp.client.auth import OAuthFlowError
 from mcp.shared.exceptions import MCPError
 from mcp.shared.subscriptions import ServerEvent
 from mcp_types import (
@@ -42,6 +43,7 @@ from mcp_stateless_client.discovery import (
     verify,
 )
 from mcp_stateless_client.elicitation import make_elicitation_callback
+from mcp_stateless_client.oauth import oauth_streamable_transport
 
 APP_EXTENSION_ID = "io.modelcontextprotocol/ui"
 APP_MIME_TYPE = "text/html;profile=mcp-app"
@@ -129,8 +131,17 @@ def _client(
     advertise_apps: bool = False,
 ) -> Client:
     try:
+        server = (
+            oauth_streamable_transport(
+                config.server_url,
+                config.oauth,
+                config.request_timeout_seconds,
+            )
+            if config.oauth is not None
+            else config.server_url
+        )
         return Client(
-            config.server_url,
+            server,
             mode=config.protocol_version,
             prior_discover=prior_discover,
             client_info=Implementation(name=CLIENT_NAME, version=CLIENT_VERSION),
@@ -172,6 +183,8 @@ def _run[T](operation: Coroutine[Any, Any, T]) -> T:
         return asyncio.run(operation)
     except ClientError:
         raise
+    except OAuthFlowError as exc:
+        raise ProtocolError("OAuth client-credentials authorization failed") from exc
     except MCPError as exc:
         raise ProtocolError(f"MCP protocol error {exc.code}: {exc.error.message}") from exc
     except ValidationError as exc:
@@ -179,6 +192,8 @@ def _run[T](operation: Coroutine[Any, Any, T]) -> T:
     except (HttpTransportError, TimeoutError, OSError) as exc:
         raise TransportError(f"Could not communicate with the MCP server: {exc}") from exc
     except BaseExceptionGroup as exc:
+        if _first_nested(exc, OAuthFlowError) is not None:
+            raise ProtocolError("OAuth client-credentials authorization failed") from exc
         if (protocol_error := _first_nested(exc, MCPError)) is not None:
             raise ProtocolError(
                 f"MCP protocol error {protocol_error.code}: {protocol_error.message}"
